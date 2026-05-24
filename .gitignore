@@ -1,0 +1,7 @@
+# Zig Build Remains
+.zig-cache/
+zig-out/
+zig-pkg/
+
+# MacOS
+.DS_Store
