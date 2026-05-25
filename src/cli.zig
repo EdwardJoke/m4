@@ -174,6 +174,9 @@ fn resolveUses(vm: *VM, arena: *maple.ast.NodeArena, stmts: []const usize) !void
             if (std.mem.eql(u8, path, "io")) {
                 try maple.stdlib.io.register(vm);
             }
+            if (std.mem.eql(u8, path, "thread")) {
+                try maple.stdlib.thread.register(vm);
+            }
         }
     }
 }
@@ -233,6 +236,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         defer vm.deinit();
 
         try maple.stdlib.io.register(&vm);
+        try maple.stdlib.thread.register(&vm);
         try resolveUses(&vm, &parser.arena, stmts);
 
         vm.interpret(&compiler.chunk) catch |err| {

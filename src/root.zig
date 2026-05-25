@@ -12,6 +12,7 @@ pub const type_check = @import("type_check.zig");
 pub const object = @import("object.zig");
 pub const stdlib = struct {
     pub const io = @import("stdlib/io.zig");
+    pub const thread = @import("stdlib/thread.zig");
 };
 pub const fmt = @import("fmt.zig");
 pub const debug = @import("debug.zig");

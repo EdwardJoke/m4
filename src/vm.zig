@@ -55,7 +55,7 @@ pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     return self.run();
 }
 
-fn run(self: *VM) !void {
+pub fn run(self: *VM) !void {
     while (true) {
         if (self.pc >= self.chunk.?.code.items.len) break;
         const inst = self.chunk.?.code.items[self.pc];
