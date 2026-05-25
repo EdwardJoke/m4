@@ -429,6 +429,13 @@ pub const Compiler = struct {
                 try self.chunk.write(OpCode.encodeAx(.try_prop, r), 1);
                 return r;
             },
+            .index => |idx| {
+                const obj_reg = try self.compileExpr(idx.object);
+                const idx_reg = try self.compileExpr(idx.idx);
+                const r = self.allocReg();
+                try self.chunk.write(OpCode.encodeABC(.index_get, r, obj_reg, idx_reg), 1);
+                return r;
+            },
             .struct_lit => |sl| {
                 const sr = self.allocReg();
                 try self.chunk.write(OpCode.encodeAx(.new_struct, sr), 1);
@@ -508,6 +515,7 @@ fn compileStmtToChunk(
         },
         .if_stmt => try compileIfToChunk(allocator, arena, chunk, locals, loops, reg_count, node_idx),
         .loop_stmt => try compileLoopToChunk(allocator, arena, chunk, locals, loops, reg_count, node_idx),
+        .for_stmt => try compileForToChunk(allocator, arena, chunk, locals, loops, reg_count, node_idx),
         .continue_stmt => {
             if (loops.items.len == 0) return error.CompileError;
             const lp = &loops.items[loops.items.len - 1];
@@ -555,7 +563,7 @@ fn compileExprToChunk(
     node_idx: usize,
 ) Error!u8 {
     const node = arena.get(node_idx);
-    switch (node) {
+    return switch (node) {
         .int_lit => |v| {
             const r = reg_count.*;
             reg_count.* += 1;
@@ -639,12 +647,18 @@ fn compileExprToChunk(
             reg_count.* += 1;
             const ci = try chunk.addConstant(.{ .string = callee_name });
             try chunk.write(OpCode.encodeABx(.load_global, cr, ci), 1);
-            for (c.args) |a| _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, a);
+            for (c.args, 0..) |a, i| {
+                const arg_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, a);
+                const expected = cr + 1 + @as(u8, @intCast(i));
+                if (arg_reg != expected) {
+                    try chunk.write(OpCode.encodeABx(.move_op, expected, arg_reg), 1);
+                    reg_count.* = arg_reg;
+                }
+            }
             const dr = reg_count.*;
             reg_count.* += 1;
             try chunk.write(OpCode.encodeABC(.call, dr, cr, @intCast(c.args.len)), 1);
-            for (0..c.args.len) |_| reg_count.* -= 1;
-            reg_count.* -= 1;
+            reg_count.* = dr + 1;
             return dr;
         },
         .assign => |a| {
@@ -675,8 +689,99 @@ fn compileExprToChunk(
             }
             return vr;
         },
+        .struct_lit => |sl| {
+            const sr = reg_count.*;
+            reg_count.* += 1;
+            try chunk.write(OpCode.encodeAx(.new_struct, sr), 1);
+            for (sl.fields) |f| {
+                const val_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, f.value);
+                if (val_reg != sr + 1) {
+                    try chunk.write(OpCode.encodeABx(.move_op, sr + 1, val_reg), 1);
+                    reg_count.* = val_reg;
+                }
+                const nci = try chunk.addConstant(.{ .string = f.name });
+                try chunk.write(OpCode.encodeABx(.struct_set, sr, nci), 1);
+            }
+            reg_count.* = sr + 1;
+            return sr;
+        },
+        .index => |idx| {
+            const obj_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, idx.object);
+            const idx_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, idx.idx);
+            const r = reg_count.*;
+            reg_count.* += 1;
+            try chunk.write(OpCode.encodeABC(.index_get, r, obj_reg, idx_reg), 1);
+            return r;
+        },
+        .try_expr => |inner| {
+            const r = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, inner);
+            try chunk.write(OpCode.encodeAx(.try_prop, r), 1);
+            return r;
+        },
         else => { return 0; },
-    }
+    };
+}
+
+fn compileForToChunk(
+    allocator: std.mem.Allocator,
+    arena: *ast.NodeArena,
+    chunk: *Chunk,
+    locals: *std.ArrayList(Local),
+    loops: *std.ArrayList(LoopInfo),
+    reg_count: *u8,
+    node_idx: usize,
+) Error!void {
+    const fs = arena.get(node_idx).for_stmt;
+    const iter_reg = reg_count.*;
+    reg_count.* += 1;
+    // Compile iterable and store in iter_reg
+    const iter_tmp = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, fs.iterable);
+    try chunk.write(OpCode.encodeABx(.move_op, iter_reg, iter_tmp), 1);
+    reg_count.* -= 1;
+
+    const var_slot = reg_count.*;
+    reg_count.* += 1;
+    // We'll store the loop variable here later, but first set up index
+    const idx_reg = reg_count.*;
+    reg_count.* += 1;
+    try chunk.write(OpCode.encodeABx(.load_const, idx_reg, try chunk.addConstant(.{ .int = 0 })), 1);
+
+    const loop_start = chunk.len();
+    const len_reg = reg_count.*;
+    reg_count.* += 1;
+    try chunk.write(OpCode.encodeABC(.index_len, len_reg, iter_reg, 0), 1);
+    const cmp_reg = reg_count.*;
+    reg_count.* += 1;
+    try chunk.write(OpCode.encodeABC(.lt, cmp_reg, idx_reg, len_reg), 1);
+    const exit_jump = chunk.len();
+    try chunk.write(OpCode.encodeAsBx(.jump_if_false, cmp_reg, 0), 1);
+
+    try chunk.write(OpCode.encodeABC(.index_get, var_slot, iter_reg, idx_reg), 1);
+    // Add loop variable as a local
+    try locals.append(allocator, .{ .name = fs.var_name, .slot = var_slot, .mutable = false });
+
+    const lp = LoopInfo{ .start_pc = loop_start, .exit_patches = std.ArrayList(usize).empty };
+    const lp_idx = loops.items.len;
+    try loops.append(allocator, lp);
+
+    const body_save = reg_count.*;
+    try compileStmtToChunk(allocator, arena, chunk, locals, loops, reg_count, fs.body);
+    reg_count.* = body_save;
+
+    const one_const = try chunk.addConstant(.{ .int = 1 });
+    const one_reg = reg_count.*;
+    reg_count.* += 1;
+    try chunk.write(OpCode.encodeABx(.load_const, one_reg, one_const), 1);
+    try chunk.write(OpCode.encodeABC(.add, idx_reg, idx_reg, one_reg), 1);
+
+    const back: i16 = @intCast(@as(i32, @intCast(loop_start)) - @as(i32, @intCast(chunk.len())));
+    try chunk.write(OpCode.encodeAsBx(.jump, 0, back), 1);
+
+    const exit_pc = chunk.len();
+    patchJumpInChunk(chunk, exit_jump, exit_pc);
+    for (loops.items[lp_idx].exit_patches.items) |p| patchJumpInChunk(chunk, p, exit_pc);
+    loops.items[lp_idx].exit_patches.deinit(allocator);
+    _ = loops.pop();
 }
 
 fn compileIfToChunk(
