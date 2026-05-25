@@ -47,6 +47,14 @@ pub fn nextToken(self: *Scanner) Token.Token {
     }
 
     if (!self.in_line) {
+        // Skip indentation tracking when inside parentheses
+        if (self.indent_stack.items.len > 1 and self.indent_stack.items[self.indent_stack.items.len - 1] == 0xFFFF_FFFF) {
+            self.in_line = true;
+            self.start = self.current;
+            skipSpaces(self);
+            self.start = self.current;
+            return nextToken(self);
+        }
         return handleIndent(self);
     }
 
@@ -64,8 +72,18 @@ pub fn nextToken(self: *Scanner) Token.Token {
             self.in_line = false;
             return makeToken(self, .newline, "");
         },
-        '(' => return makeToken(self, .lparen, ""),
-        ')' => return makeToken(self, .rparen, ""),
+        '(' => {
+            // Push sentinel to suppress indentation tracking inside parens
+            self.indent_stack.append(self.allocator, 0xFFFF_FFFF) catch @panic("OOM");
+            return makeToken(self, .lparen, "");
+        },
+        ')' => {
+            // Pop the paren indentation sentinel
+            if (self.indent_stack.items.len > 1 and self.indent_stack.items[self.indent_stack.items.len - 1] == 0xFFFF_FFFF) {
+                _ = self.indent_stack.pop();
+            }
+            return makeToken(self, .rparen, "");
+        },
         '[' => return makeToken(self, .lbracket, ""),
         ']' => return makeToken(self, .rbracket, ""),
         ',' => return makeToken(self, .comma, ""),
