@@ -1,0 +1,8 @@
+# Hello, Maple!
+# The simplest Maple program — just call io.println
+
+use io
+
+pub fun main() i32
+    io.println("Hello, Maple!")
+    ret 0

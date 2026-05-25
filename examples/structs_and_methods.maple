@@ -1,0 +1,60 @@
+# Structs and Methods
+# Demonstrates: type declarations, struct literals, field access
+
+use io
+
+type User
+    name str
+    age  i32
+
+type Book
+    title  str
+    author str
+    pages  i32
+
+fun describe_user(u User)
+    io.print(u.name)
+    io.print(" is ")
+    io.print(u.age)
+    io.println(" years old")
+
+fun is_adult(u User) bool
+    if u.age >= 18
+        ret true
+    else
+        ret false
+
+fun describe_book(b Book)
+    io.print(b.title)
+    io.print(" by ")
+    io.print(b.author)
+    io.print(" (")
+    io.print(b.pages)
+    io.println(" pages)")
+
+pub fun main() i32
+    let alice User = User(
+        name: "Alice"
+        age: 30
+    )
+    let bob User = User(
+        name: "Bob"
+        age: 16
+    )
+    let fav_book Book = Book(
+        title: "The Maple Language"
+        author: "Edward"
+        pages: 280
+    )
+    describe_user(alice)
+    describe_user(bob)
+    if is_adult(alice)
+        io.println("Alice is an adult")
+    else
+        io.println("Alice is not an adult")
+    if is_adult(bob)
+        io.println("Bob is an adult")
+    else
+        io.println("Bob is not an adult")
+    describe_book(fav_book)
+    ret 0
