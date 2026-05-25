@@ -3,6 +3,7 @@ const OpCode = @import("opcode.zig");
 const Value = @import("value.zig");
 const Chunk = @import("chunk.zig").Chunk;
 const Object = @import("object.zig");
+const err_mod = @import("error.zig");
 
 const REGISTER_COUNT = 256;
 const FRAMES_MAX = 64;
@@ -26,6 +27,7 @@ pc: usize,
 frames: [FRAMES_MAX]CallFrame,
 frame_count: usize,
 globals: std.StringHashMap(Value.Value),
+diag: ?*err_mod.DiagnosticList = null,
 
 pub fn init(allocator: std.mem.Allocator) VM {
     return .{
@@ -53,6 +55,20 @@ pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     self.frame_count = 1;
     self.frames[0] = .{ .chunk = chunk, .pc = 0, .base_reg = 0, .ret_pc = 0, .ret_dst = 0 };
     return self.run();
+}
+
+fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: anytype) error{RuntimeError} {
+    const msg = std.fmt.allocPrint(self.allocator, fmt, args) catch "runtime error";
+    if (self.diag) |diag| {
+        diag.add(self.allocator, .{
+            .severity = .@"error",
+            .code = code,
+            .message = msg,
+        }) catch {};
+    } else {
+        std.debug.print("Runtime error [{s}]: {s}\n", .{ code, msg });
+    }
+    return error.RuntimeError;
 }
 
 pub fn run(self: *VM) !void {
@@ -88,8 +104,7 @@ pub fn run(self: *VM) !void {
                 if (self.globals.get(name)) |val| {
                     self.registers[base + dec.a] = val;
                 } else {
-                    std.debug.print("Runtime error: undefined variable '{s}'\n", .{name});
-                    return error.RuntimeError;
+                    return self.runtimeError("r001", "undefined variable '{s}'", .{name});
                 }
                 self.pc += 1;
             },
@@ -111,19 +126,19 @@ pub fn run(self: *VM) !void {
                 self.registers[frame.base_reg + dec.bx] = self.registers[base + dec.a];
                 self.pc += 1;
             },
-            .add => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = try binaryOp(.add, self.registers[base+d.b], self.registers[base+d.c]); self.pc += 1; },
-            .sub => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = try binaryOp(.sub, self.registers[base+d.b], self.registers[base+d.c]); self.pc += 1; },
-            .mul => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = try binaryOp(.mul, self.registers[base+d.b], self.registers[base+d.c]); self.pc += 1; },
-            .div_op => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = try binaryOp(.div_op, self.registers[base+d.b], self.registers[base+d.c]); self.pc += 1; },
-            .mod_op => { const d = OpCode.decodeABC(inst); const a = self.registers[base+d.b]; const b = self.registers[base+d.c]; if (a == .int and b == .int) { self.registers[base+d.a] = .{ .int = @mod(a.int, b.int) }; } else return error.RuntimeError; self.pc += 1; },
-            .neg => { const r = base + OpCode.decodeAx(inst); self.registers[r] = switch (self.registers[r]) { .int => |i| .{ .int = -i }, .float => |f| .{ .float = -f }, else => return error.RuntimeError, }; self.pc += 1; },
+            .add => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = binaryOp(.add, self.registers[base+d.b], self.registers[base+d.c]) catch return self.runtimeError("r002", "type mismatch in + operation", .{}); self.pc += 1; },
+            .sub => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = binaryOp(.sub, self.registers[base+d.b], self.registers[base+d.c]) catch return self.runtimeError("r002", "type mismatch in - operation", .{}); self.pc += 1; },
+            .mul => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = binaryOp(.mul, self.registers[base+d.b], self.registers[base+d.c]) catch return self.runtimeError("r002", "type mismatch in * operation", .{}); self.pc += 1; },
+            .div_op => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = binaryOp(.div_op, self.registers[base+d.b], self.registers[base+d.c]) catch return self.runtimeError("r002", "type mismatch in / operation", .{}); self.pc += 1; },
+            .mod_op => { const d = OpCode.decodeABC(inst); const a = self.registers[base+d.b]; const b = self.registers[base+d.c]; if (a == .int and b == .int) { self.registers[base+d.a] = .{ .int = @mod(a.int, b.int) }; } else return self.runtimeError("r003", "modulo requires integer operands", .{}); self.pc += 1; },
+            .neg => { const r = base + OpCode.decodeAx(inst); self.registers[r] = switch (self.registers[r]) { .int => |i| .{ .int = -i }, .float => |f| .{ .float = -f }, else => return self.runtimeError("r004", "cannot negate non-numeric value", .{}), }; self.pc += 1; },
             .not_ => { const r = base + OpCode.decodeAx(inst); self.registers[r] = .{ .bool = !self.registers[r].isTruthy() }; self.pc += 1; },
             .eq => { const d = OpCode.decodeABC(inst); const result = self.registers[base+d.b].eql(self.registers[base+d.c]); self.registers[base+d.a] = .{ .bool = result }; self.pc += 1; },
             .neq => { const d = OpCode.decodeABC(inst); const result = self.registers[base+d.b].eql(self.registers[base+d.c]); self.registers[base+d.a] = .{ .bool = !result }; self.pc += 1; },
-            .gt => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li > ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) > rf }, else => return error.RuntimeError, }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf > @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf > rf }, else => return error.RuntimeError, }, else => return error.RuntimeError, }; self.pc += 1; },
-            .lt => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li < ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) < rf }, else => return error.RuntimeError, }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf < @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf < rf }, else => return error.RuntimeError, }, else => return error.RuntimeError, }; self.pc += 1; },
-            .gte => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li >= ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) >= rf }, else => return error.RuntimeError, }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf >= @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf >= rf }, else => return error.RuntimeError, }, else => return error.RuntimeError, }; self.pc += 1; },
-            .lte => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li <= ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) <= rf }, else => return error.RuntimeError, }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf <= @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf <= rf }, else => return error.RuntimeError, }, else => return error.RuntimeError, }; self.pc += 1; },
+            .gt => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li > ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) > rf }, else => return self.runtimeError("r005", "cannot compare int with non-numeric type", .{}), }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf > @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf > rf }, else => return self.runtimeError("r005", "cannot compare float with non-numeric type", .{}), }, else => return self.runtimeError("r005", "cannot compare non-numeric types", .{}), }; self.pc += 1; },
+            .lt => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li < ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) < rf }, else => return self.runtimeError("r005", "cannot compare int with non-numeric type", .{}), }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf < @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf < rf }, else => return self.runtimeError("r005", "cannot compare float with non-numeric type", .{}), }, else => return self.runtimeError("r005", "cannot compare non-numeric types", .{}), }; self.pc += 1; },
+            .gte => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li >= ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) >= rf }, else => return self.runtimeError("r005", "cannot compare int with non-numeric type", .{}), }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf >= @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf >= rf }, else => return self.runtimeError("r005", "cannot compare float with non-numeric type", .{}), }, else => return self.runtimeError("r005", "cannot compare non-numeric types", .{}), }; self.pc += 1; },
+            .lte => { const d = OpCode.decodeABC(inst); const l = self.registers[base+d.b]; const r = self.registers[base+d.c]; self.registers[base+d.a] = switch (l) { .int => |li| switch (r) { .int => |ri| .{ .bool = li <= ri }, .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) <= rf }, else => return self.runtimeError("r005", "cannot compare int with non-numeric type", .{}), }, .float => |lf| switch (r) { .int => |ri| .{ .bool = lf <= @as(f64, @floatFromInt(ri)) }, .float => |rf| .{ .bool = lf <= rf }, else => return self.runtimeError("r005", "cannot compare float with non-numeric type", .{}), }, else => return self.runtimeError("r005", "cannot compare non-numeric types", .{}), }; self.pc += 1; },
             .and_ => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = .{ .bool = self.registers[base+d.b].isTruthy() and self.registers[base+d.c].isTruthy() }; self.pc += 1; },
             .or_ => { const d = OpCode.decodeABC(inst); self.registers[base+d.a] = .{ .bool = self.registers[base+d.b].isTruthy() or self.registers[base+d.c].isTruthy() }; self.pc += 1; },
 
@@ -141,7 +156,7 @@ pub fn run(self: *VM) !void {
                     self.pc += 1;
                 } else if (callee == .fun_obj) {
                     const fun: *Object.FunObj = @ptrCast(@alignCast(callee.fun_obj));
-                    if (self.frame_count >= FRAMES_MAX) return error.RuntimeError;
+                    if (self.frame_count >= FRAMES_MAX) return self.runtimeError("r006", "stack overflow: too many nested calls", .{});
                     self.frames[self.frame_count - 1].pc = self.pc + 1;
                     const new_base = base + dec.b + 1 + dec.c;
                     self.frames[self.frame_count] = .{ .chunk = &fun.chunk, .pc = 0, .base_reg = new_base, .ret_pc = 0, .ret_dst = base + dec.a };
@@ -152,7 +167,7 @@ pub fn run(self: *VM) !void {
                     self.chunk = &fun.chunk;
                     self.pc = 0;
                 } else {
-                    return error.RuntimeError;
+                    return self.runtimeError("r007", "value is not callable", .{});
                 }
             },
             .ret => {
@@ -171,8 +186,8 @@ pub fn run(self: *VM) !void {
             },
 
             .new_vec => { const d = OpCode.decodeABx(inst); const v = try self.allocator.create(VecObj); v.items = std.ArrayList(Value.Value).empty; for (0..d.bx) |_| try v.items.append(self.allocator, .nil); self.registers[base+d.a] = .{ .vec = v }; self.pc += 1; },
-            .index_get => { const d = OpCode.decodeABC(inst); const obj = self.registers[base+d.b]; const idx = self.registers[base+d.c]; if (obj == .vec and idx == .int) { const v: *VecObj = @ptrCast(@alignCast(obj.vec)); const i: usize = @intCast(idx.int); if (i < v.items.items.len) { self.registers[base+d.a] = v.items.items[i]; } else return error.RuntimeError; } else return error.RuntimeError; self.pc += 1; },
-            .index_len => { const d = OpCode.decodeABC(inst); const obj = self.registers[base+d.b]; if (obj == .vec) { const v: *VecObj = @ptrCast(@alignCast(obj.vec)); self.registers[base+d.a] = .{ .int = @intCast(v.items.items.len) }; } else return error.RuntimeError; self.pc += 1; },
+            .index_get => { const d = OpCode.decodeABC(inst); const obj = self.registers[base+d.b]; const idx = self.registers[base+d.c]; if (obj == .vec and idx == .int) { const v: *VecObj = @ptrCast(@alignCast(obj.vec)); const i: usize = @intCast(idx.int); if (i < v.items.items.len) { self.registers[base+d.a] = v.items.items[i]; } else return self.runtimeError("r008", "index out of bounds", .{}); } else return self.runtimeError("r009", "cannot index non-vector value", .{}); self.pc += 1; },
+            .index_len => { const d = OpCode.decodeABC(inst); const obj = self.registers[base+d.b]; if (obj == .vec) { const v: *VecObj = @ptrCast(@alignCast(obj.vec)); self.registers[base+d.a] = .{ .int = @intCast(v.items.items.len) }; } else return self.runtimeError("r009", "cannot get length of non-indexable value", .{}); self.pc += 1; },
             .vec_set => { const d = OpCode.decodeABC(inst); const v: *VecObj = @ptrCast(@alignCast(self.registers[base+d.a].vec)); if (@as(usize, d.b) < v.items.items.len) v.items.items[@intCast(d.b)] = self.registers[base+d.c]; self.pc += 1; },
 
             .move_op => { const d = OpCode.decodeABx(inst); self.registers[base+d.a] = self.registers[base+d.bx]; self.pc += 1; },
@@ -210,11 +225,11 @@ pub fn run(self: *VM) !void {
 
             .try_prop => {
                 const r = base + OpCode.decodeAx(inst);
-                if (self.registers[r] == .nil) return error.RuntimeError;
+                if (self.registers[r] == .nil) return self.runtimeError("r010", "nil value unwrapped with ! operator", .{});
                 self.pc += 1;
             },
 
-            else => return error.RuntimeError,
+            else => return self.runtimeError("r011", "unknown opcode", .{}),
         }
     }
 }

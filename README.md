@@ -101,7 +101,7 @@ type User
 fun greet(u User)
     io.println("hello " + u.name)
 
-pub fun main() i32
+pub fun main()
     let user User = User(
         name: "edward"
         age: 20
@@ -111,8 +111,6 @@ pub fun main() i32
 
     for n in [1, 2, 3]
         io.println(n)
-
-    ret 0
 ```
 
 ### Variables

@@ -4,6 +4,7 @@ const OpCode = @import("opcode.zig");
 const Chunk = @import("chunk.zig").Chunk;
 const Value = @import("value.zig");
 const Object = @import("object.zig");
+const err_mod = @import("error.zig");
 
 const Local = struct {
     name: []const u8,
@@ -26,6 +27,7 @@ pub const Compiler = struct {
     reg_count: u8,
     loop_stack: std.ArrayList(LoopInfo),
     error_count: u32,
+    diag: ?*err_mod.DiagnosticList = null,
 
     pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
         return .{
@@ -44,6 +46,21 @@ pub const Compiler = struct {
         self.locals.deinit(self.allocator);
         for (self.loop_stack.items) |*lp| lp.exit_patches.deinit(self.allocator);
         self.loop_stack.deinit(self.allocator);
+    }
+
+    fn compileError(self: *Compiler, code: []const u8, comptime fmt: []const u8, args: anytype) error{CompileError} {
+        self.error_count += 1;
+        const msg = std.fmt.allocPrint(self.allocator, fmt, args) catch "compile error";
+        if (self.diag) |diag| {
+            diag.add(self.allocator, .{
+                .severity = .@"error",
+                .code = code,
+                .message = msg,
+            }) catch {};
+        } else {
+            std.debug.print("Compile error [{s}]: {s}\n", .{ code, msg });
+        }
+        return error.CompileError;
     }
 
     fn allocReg(self: *Compiler) u8 {
@@ -129,7 +146,7 @@ pub const Compiler = struct {
                     try self.compileDeclOrStmt(s);
                 }
             },
-            else => self.error_count += 1,
+            else => return self.compileError("c001", "unsupported statement type", .{}),
         }
     }
 
@@ -176,7 +193,7 @@ pub const Compiler = struct {
         const body = self.arena.get(fs.body);
         if (body == .block) {
             for (body.block) |s| {
-                try compileStmtToChunk(
+                compileStmtToChunk(
                     self.allocator,
                     self.arena,
                     &body_chunk,
@@ -184,7 +201,10 @@ pub const Compiler = struct {
                     &body_loops,
                     &body_regs,
                     s,
-                );
+                ) catch |err| switch (err) {
+                    error.CompileError => return self.compileError("c001", "compile error in function '{s}'", .{fs.name}),
+                    else => return err,
+                };
             }
         }
 
@@ -307,14 +327,14 @@ pub const Compiler = struct {
     }
 
     fn compileContinue(self: *Compiler) Error!void {
-        if (self.loop_stack.items.len == 0) { self.error_count += 1; return; }
+        if (self.loop_stack.items.len == 0) return self.compileError("c002", "continue outside loop", .{});
         const lp = &self.loop_stack.items[self.loop_stack.items.len - 1];
         const off: i16 = @intCast(@as(i32, @intCast(lp.start_pc)) - @as(i32, @intCast(self.chunk.len())));
         try self.chunk.write(OpCode.encodeAsBx(.jump, 0, off), 1);
     }
 
     fn compileEsc(self: *Compiler) Error!void {
-        if (self.loop_stack.items.len == 0) { self.error_count += 1; return; }
+        if (self.loop_stack.items.len == 0) return self.compileError("c003", "esc outside loop", .{});
         const lp = &self.loop_stack.items[self.loop_stack.items.len - 1];
         const patch_idx = self.chunk.len();
         try self.chunk.write(OpCode.encodeAsBx(.jump, 0, 0), 1);
@@ -377,7 +397,10 @@ pub const Compiler = struct {
                 return or_;
             },
             .call => |c| {
-                const callee_name = try resolveCalleeName(self.arena, c.callee);
+                const callee_name = resolveCalleeName(self.arena, c.callee) catch |err| switch (err) {
+                    error.CompileError => return self.compileError("c001", "cannot resolve callee name", .{}),
+                    else => return err,
+                };
                 const cr = self.allocReg();
                 const ci = try self.chunk.addConstant(.{ .string = callee_name });
                 try self.chunk.write(OpCode.encodeABx(.load_global, cr, ci), 1);
@@ -452,7 +475,7 @@ pub const Compiler = struct {
                 self.reg_count = sr + 1;
                 return sr;
             },
-            else => { self.error_count += 1; return 0; },
+            else => return self.compileError("c001", "unsupported expression type", .{}),
         };
     }
 

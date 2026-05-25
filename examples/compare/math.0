@@ -1,0 +1,6 @@
+fn answer i32
+  ret + 40 2
+
+pub fn main Void world World !
+  if == answer() 42
+    check world.out.write "math works\n"

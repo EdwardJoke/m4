@@ -84,7 +84,7 @@ pub const Checker = struct {
         if (self.diag) |diag| {
             diag.add(self.allocator, .{
                 .severity = .@"error",
-                .code = "type-error",
+                .code = "t001",
                 .message = msg,
             }) catch {};
         } else {

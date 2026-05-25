@@ -17,6 +17,7 @@ const Flags = struct {
     file_path: ?[]const u8 = null,
     should_exit: bool = false,
     error_format: ?maple.err.Format = null,
+    explain_code: ?[]const u8 = null,
 };
 
 pub fn run(init: std.process.Init) !void {
@@ -25,6 +26,11 @@ pub fn run(init: std.process.Init) !void {
 
     const flags = try parseFlags(args);
     if (flags.should_exit) return;
+
+    if (flags.explain_code) |code| {
+        try runExplain(arena_alloc, code, flags.error_format);
+        return;
+    }
 
     if (flags.file_path) |path| {
         if (std.mem.eql(u8, path, "-")) {
@@ -69,12 +75,26 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.format_mode = true;
             continue;
         }
-        if (std.mem.startsWith(u8, arg, "--error-format=")) {
-            const fmt_str = arg["--error-format=".len..];
-            flags.error_format = maple.err.Format.fromString(fmt_str) orelse {
-                std.debug.print("maple: unknown error format '{s}'. Use zon, json, or yaml.\n", .{fmt_str});
+        if (std.mem.eql(u8, arg, "--zon")) {
+            flags.error_format = .zon;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--json")) {
+            flags.error_format = .json;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--yaml")) {
+            flags.error_format = .yaml;
+            continue;
+        }
+        // explain subcommand
+        if (std.mem.eql(u8, arg, "explain")) {
+            if (i + 1 >= args.len or std.mem.startsWith(u8, args[i + 1], "-")) {
+                std.debug.print("maple: 'explain' requires an error code. Try 'maple explain r001'.\n", .{});
                 return error.InvalidFlag;
-            };
+            }
+            i += 1;
+            flags.explain_code = args[i];
             continue;
         }
         if (!std.mem.startsWith(u8, arg, "-")) {
@@ -149,9 +169,17 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
 
     var compiler = Compiler.init(allocator, &parser.arena);
     defer compiler.deinit();
+    if (flags.error_format != null) compiler.diag = &diag_list;
 
     compiler.compile(stmts) catch |err| {
-        if (err == error.CompileError) return;
+        if (err == error.CompileError) {
+            if (flags.error_format) |fmt| {
+                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                defer allocator.free(out);
+                std.debug.print("{s}\n", .{out});
+            }
+            return;
+        }
         std.debug.print("Compile error: {}\n", .{err});
         return;
     };
@@ -160,8 +188,17 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
         debug.disassemble(&compiler.chunk, if (flags.file_path) |p| p else "<source>");
     }
 
+    if (flags.error_format != null) vm.diag = &diag_list;
     vm.interpret(&compiler.chunk) catch |err| {
-        if (err != error.RuntimeError) std.debug.print("Runtime error: {}\n", .{err});
+        if (err == error.RuntimeError) {
+            if (flags.error_format) |fmt| {
+                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                defer allocator.free(out);
+                std.debug.print("{s}\n", .{out});
+            }
+            return;
+        }
+        std.debug.print("Runtime error: {}\n", .{err});
         return;
     };
 }
@@ -181,8 +218,13 @@ fn resolveUses(vm: *VM, arena: *maple.ast.NodeArena, stmts: []const usize) !void
     }
 }
 
-fn runRepl(arena: std.mem.Allocator) !void {
+fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?maple.err.Format) !void {
+    const out = try maple.err.explainError(allocator, code, format);
+    defer allocator.free(out);
+    std.debug.print("{s}\n", .{out});
+}
 
+fn runRepl(arena: std.mem.Allocator) !void {
     std.debug.print("Maple v{s} REPL  (:h for help, :q to quit)\n\n", .{VERSION});
 
     var line_buf = std.ArrayList(u8).empty;
@@ -248,9 +290,9 @@ fn runRepl(arena: std.mem.Allocator) !void {
 
 fn wrapReplInput(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
     const stmt_starts = [_][]const u8{
-        "let", "mut", "fun", "pub", "type", "use",
-        "if", "elif", "else", "loop", "for",
-        "ret", "continue", "esc",
+        "let",      "mut",  "fun",  "pub",  "type", "use",
+        "if",       "elif", "else", "loop", "for",  "ret",
+        "continue", "esc",
     };
     for (stmt_starts) |kw| {
         if (std.mem.startsWith(u8, input, kw)) {
@@ -307,23 +349,17 @@ fn printHelp() void {
         \\Maple v{s} — statically typed, AI-native scripting language
         \\
         \\Usage:
-        \\  maple [flags] <file.maple>   Run file
-        \\  maple [flags] -              Run from stdin
-        \\  maple                        Launch REPL
+        \\  maple [flags] <file.maple>     Run file
+        \\  maple [flags] -                Run from stdin
+        \\  maple                          Launch REPL
+        \\  maple explain <code>           Explain an error code
         \\
         \\Flags:
-        \\  -d, --debug                  Show bytecode before execution
-        \\  --check                      Parse and type-check only
-        \\  --error-format=zon|json|yaml Structured error output format
-        \\  -h, --help                   Show this help
-        \\  --check         Parse only, no execution
-        \\  -h, --help      Show this help
-        \\  -v, --version   Show version
-        \\
-        \\Examples:
-        \\  maple hello.maple
-        \\  maple -d test.maple
-        \\  echo 'io.println(42)' | maple -
+        \\  -d, --debug                    Show bytecode before execution
+        \\  --check                        Parse and type-check only
+        \\  --zon, --json, --yaml           Structured error output format
+        \\  -h, --help                     Show this help
+        \\  -v, --version                  Show version
         \\
     , .{VERSION});
 }
@@ -331,4 +367,3 @@ fn printHelp() void {
 fn printVersion() void {
     std.debug.print("Maple v{s}\n", .{VERSION});
 }
-

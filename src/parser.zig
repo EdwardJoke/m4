@@ -394,7 +394,7 @@ fn errorAt(self: *Parser, token: Token.Token, msg: []const u8) error{ParseError}
     if (self.diag) |diag| {
         diag.add(self.allocator, .{
             .severity = .@"error",
-            .code = "parse-error",
+            .code = "p001",
             .message = msg,
             .location = .{ .file = "<source>", .line = token.line, .column = 0 },
         }) catch {};
