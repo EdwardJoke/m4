@@ -572,24 +572,32 @@ fn isStructLiteral(self: *Parser, callee: usize) bool {
     return false;
 }
 
+fn skipNewlinesAndIndent(self: *Parser) void {
+    while (self.check(.newline) or self.check(.indent) or self.check(.dedent)) {
+        self.advanceRaw();
+    }
+}
+
 fn structLiteral(self: *Parser, type_node: usize) !usize {
     const type_name = self.arena.get(type_node).ident;
     var fields = std.ArrayList(ast.NamedArg).empty;
 
     if (!self.check(.rparen)) {
         while (true) {
-            // Skip newlines between fields
-            if (self.check(.newline)) self.advanceRaw();
+            // Skip newlines, indents, and dedents between fields
+            self.skipNewlinesAndIndent();
             if (self.check(.rparen)) break;
             const fname = try self.consumeIdent("Expected field name");
             try self.consume(.colon, "Expected ':'");
             const val = try self.expression();
             try fields.append(self.allocator, .{ .name = fname, .value = val });
-            // Fields separated by whitespace/newlines, or end with )
+            // After the field, check for end or more fields
+            self.skipNewlinesAndIndent();
             if (self.check(.rparen)) break;
             if (!self.check(.ident)) break;
         }
     }
+    self.skipNewlinesAndIndent();
     try self.consume(.rparen, "Expected ')'");
     return self.arena.add(.{ .struct_lit = .{ .type_name = type_name, .fields = try fields.toOwnedSlice(self.allocator) } });
 }
