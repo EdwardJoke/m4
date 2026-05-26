@@ -1,8 +1,8 @@
-# Maple Language Specification (Draft v0.1)
+# m4 Language Specification (Draft v0.1)
 
 ## Overview
 
-Maple is a statically typed, AI-native scripting language designed for:
+m4 is a statically typed, AI-native scripting language designed for:
 
 * fast execution
 * low memory usage
@@ -11,7 +11,7 @@ Maple is a statically typed, AI-native scripting language designed for:
 * high LLM generation reliability
 * minimal grammar complexity
 
-Maple emphasizes:
+m4 emphasizes:
 
 * explicitness
 * predictable parsing
@@ -25,7 +25,7 @@ The language is indentation-sensitive and does not use `{}` block delimiters.
 
 # Design Goals
 
-## Mapleary Goals
+## m4ary Goals
 
 1. Fast execution
 2. Low memory usage
@@ -54,7 +54,7 @@ Syntax aliases are forbidden.
 
 ## 2. Indentation Defines Blocks
 
-Maple does not use:
+m4 does not use:
 
 * `{`
 * `}`
@@ -64,7 +64,7 @@ Blocks are defined by indentation only.
 
 Example:
 
-```maple
+```m4
 if x > 10
     io.println("large")
 else
@@ -79,7 +79,7 @@ Types should be written explicitly whenever practical.
 
 Preferred:
 
-```maple
+```m4
 let x i32 = 10
 ```
 
@@ -100,7 +100,7 @@ The grammar must avoid:
 
 # Keyword Set
 
-Maple is limited to a maximum of 15 keywords.
+m4 is limited to a maximum of 15 keywords.
 
 ## Reserved Keywords
 
@@ -154,15 +154,15 @@ Semicolons are forbidden.
 
 ## Static Typing
 
-Maple is statically typed.
+m4 is statically typed.
 
 All variable bindings and function signatures are type-checked at compile time.
 
 ---
 
-## Mapleitive Types
+## m4itive Types
 
-```maple
+```m4
 i8 i16 i32 i64
 u8 u16 u32 u64
 f32 f64
@@ -176,7 +176,7 @@ bytes
 
 ## Generic Containers
 
-```maple
+```m4
 vec[T]
 map[K V]
 opt[T]
@@ -191,13 +191,13 @@ res[T E]
 
 Preferred:
 
-```maple
+```m4
 let name opt[str]
 ```
 
 Avoid:
 
-```maple
+```m4
 let name str = nil
 ```
 
@@ -207,7 +207,7 @@ let name str = nil
 
 ## Immutable Variables
 
-```maple
+```m4
 let x i32 = 10
 ```
 
@@ -215,7 +215,7 @@ let x i32 = 10
 
 ## Mutable Variables
 
-```maple
+```m4
 mut counter i32 = 0
 ```
 
@@ -225,7 +225,7 @@ mut counter i32 = 0
 
 ## Function Declaration
 
-```maple
+```m4
 fun add(a i32, b i32) i32
     ret a + b
 ```
@@ -234,7 +234,7 @@ fun add(a i32, b i32) i32
 
 ## Public Functions
 
-```maple
+```m4
 pub fun main() i32
     ret 0
 ```
@@ -253,13 +253,13 @@ Implicit returns are not supported.
 
 ## Struct-Like Types
 
-```maple
+```m4
 type User
     name str
     age  i32
 ```
 
-Maple does not include:
+m4 does not include:
 
 * classes
 * inheritance
@@ -273,7 +273,7 @@ Methods are ordinary functions.
 
 ## Conditionals
 
-```maple
+```m4
 if score > 90
     grade = "A"
 elif score > 80
@@ -286,7 +286,7 @@ else
 
 ## Infinite Loops
 
-```maple
+```m4
 loop
     tick()
 ```
@@ -295,7 +295,7 @@ loop
 
 ## Iteration
 
-```maple
+```m4
 for item in items
     print(item)
 ```
@@ -304,7 +304,7 @@ for item in items
 
 ## Loop Control
 
-```maple
+```m4
 continue
 esc
 ```
@@ -330,7 +330,7 @@ Custom operators are not supported.
 
 Function calls require parentheses.
 
-```maple
+```m4
 print(value)
 ```
 
@@ -338,7 +338,7 @@ print(value)
 
 # Memory Model
 
-Maple targets low memory usage and deterministic execution.
+m4 targets low memory usage and deterministic execution.
 
 Recommended runtime model:
 
@@ -377,17 +377,17 @@ Optional:
 
 # Error Handling
 
-Maple uses result-based error handling.
+m4 uses result-based error handling.
 
 ## Result Type
 
-```maple
+```m4
 res[T E]
 ```
 
 ## Error Propagation
 
-```maple
+```m4
 let file = fs.read("a.txt")?
 ```
 
@@ -395,7 +395,7 @@ let file = fs.read("a.txt")?
 
 # Formatting Rules
 
-Maple formatting is canonical.
+m4 formatting is canonical.
 
 A formatter must produce:
 
@@ -450,7 +450,7 @@ The following are intentionally excluded from v0.1:
 
 # Example Program
 
-```maple
+```m4
 use io
 
 type User
@@ -478,6 +478,6 @@ pub fun main() i32
 
 # Language Identity
 
-Maple is:
+m4 is:
 
 > A statically typed, indentation-sensitive, AI-native scripting language focused on deterministic syntax, low memory usage, fast execution, and reliable LLM code generation.

@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
     });
     const serde_mod = serde_dep.module("serde");
 
-    const mod = b.addModule("maple", .{
+    const mod = b.addModule("m4", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .imports = &.{
@@ -60,7 +60,7 @@ pub fn build(b: *std.Build) void {
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
     const exe = b.addExecutable(.{
-        .name = "maple",
+        .name = "m4",
         .root_module = b.createModule(.{
             // b.createModule defines a new module just like b.addModule but,
             // unlike b.addModule, it does not expose the module to consumers of
@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) void {
             // List of modules available for import in source files part of the
             // root module.
             .imports = &.{
-                .{ .name = "maple", .module = mod },
+                .{ .name = "m4", .module = mod },
                 .{ .name = "serde", .module = serde_mod },
             },
         }),

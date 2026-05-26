@@ -22,7 +22,7 @@ pub fun main() i32
     let flag bool = true
 
     # String
-    let greeting str = "Hello, Maple!"
+    let greeting str = "Hello, m4!"
 
     # Type inference — no annotation needed
     let inferred = 42

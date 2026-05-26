@@ -1,8 +1,8 @@
-# Maple
+# m4
 
 > A statically typed, indentation-sensitive, AI-native scripting language focused on deterministic syntax, low memory usage, fast execution, and reliable LLM code generation.
 
-Maple is a minimal scripting language implemented in Zig, featuring a hand-written scanner, recursive-descent Pratt parser, single-pass bytecode compiler, type checker, and a register-based virtual machine. It is designed from the ground up for low token usage, canonical formatting, and high LLM generation reliability.
+m4 is a minimal scripting language implemented in Zig, featuring a hand-written scanner, recursive-descent Pratt parser, single-pass bytecode compiler, type checker, and a register-based virtual machine. It is designed from the ground up for low token usage, canonical formatting, and high LLM generation reliability.
 
 ## Features
 
@@ -29,7 +29,7 @@ Maple is a minimal scripting language implemented in Zig, featuring a hand-writt
 zig build
 ```
 
-The binary is placed at `zig-out/bin/maple`.
+The binary is placed at `zig-out/bin/m4`.
 
 ### Run
 
@@ -38,25 +38,25 @@ The binary is placed at `zig-out/bin/maple`.
 zig build run
 
 # Run a file
-zig build run -- hello.maple
+zig build run -- hello.m4
 
 # Run from stdin
 echo 'io.println(42)' | zig build run -- -
 
 # Or build and use the binary directly
 zig build
-./zig-out/bin/maple hello.maple
+./zig-out/bin/m4 hello.m4
 ```
 
 ## CLI
 
 ```
-Maple v0.1.0 — statically typed, AI-native scripting language
+m4 v0.1.0 — statically typed, AI-native scripting language
 
 Usage:
-  maple [flags] <file.maple>   Run file
-  maple [flags] -              Run from stdin
-  maple                        Launch REPL
+  m4 [flags] <file.m4>   Run file
+  m4 [flags] -              Run from stdin
+  m4                        Launch REPL
 
 Flags:
   -d, --debug                  Show bytecode before execution
@@ -91,7 +91,7 @@ Flags:
 
 ### Example Program
 
-```maple
+```m4
 use io
 
 type User
@@ -115,7 +115,7 @@ pub fun main()
 
 ### Variables
 
-```maple
+```m4
 let x i32 = 10          # immutable, type annotation
 mut counter i32 = 0     # mutable
 let pi = 3.14           # type inference
@@ -123,14 +123,14 @@ let pi = 3.14           # type inference
 
 ### Functions
 
-```maple
+```m4
 fun add(a i32, b i32) i32
     ret a + b
 ```
 
 ### Control Flow
 
-```maple
+```m4
 if score > 90
     grade = "A"
 elif score > 80
@@ -179,7 +179,7 @@ src/
 
 ## Status
 
-Maple is in **early development** (v0.1.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, but the language and runtime are minimal. Expect significant changes and additions.
+m4 is in **early development** (v0.1.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, but the language and runtime are minimal. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

@@ -1,12 +1,12 @@
 const std = @import("std");
 const posix = std.posix;
-const maple = @import("maple");
+const m4 = @import("m4");
 const build_options = @import("build_options");
 
-const Parser = maple.Parser;
-const Compiler = maple.Compiler;
-const VM = maple.VM;
-const debug = maple.debug;
+const Parser = m4.Parser;
+const Compiler = m4.Compiler;
+const VM = m4.VM;
+const debug = m4.debug;
 
 const VERSION = build_options.version;
 
@@ -16,7 +16,7 @@ const Flags = struct {
     format_mode: bool = false,
     file_path: ?[]const u8 = null,
     should_exit: bool = false,
-    error_format: ?maple.err.Format = null,
+    error_format: ?m4.err.Format = null,
     explain_code: ?[]const u8 = null,
 };
 
@@ -90,7 +90,7 @@ fn parseFlags(args: []const []const u8) !Flags {
         // explain subcommand
         if (std.mem.eql(u8, arg, "explain")) {
             if (i + 1 >= args.len or std.mem.startsWith(u8, args[i + 1], "-")) {
-                std.debug.print("maple: 'explain' requires an error code. Try 'maple explain r001'.\n", .{});
+                std.debug.print("m4: 'explain' requires an error code. Try 'm4 explain r001'.\n", .{});
                 return error.InvalidFlag;
             }
             i += 1;
@@ -101,15 +101,15 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.file_path = arg;
             continue;
         }
-        std.debug.print("maple: unknown flag '{s}'\n", .{arg});
-        std.debug.print("Try 'maple --help' for usage.\n", .{});
+        std.debug.print("m4: unknown flag '{s}'\n", .{arg});
+        std.debug.print("Try 'm4 --help' for usage.\n", .{});
         return error.InvalidFlag;
     }
     return flags;
 }
 
 fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !void {
-    var diag_list = maple.err.DiagnosticList.init();
+    var diag_list = m4.err.DiagnosticList.init();
     defer diag_list.deinit(allocator);
 
     var parser = Parser.init(allocator, source);
@@ -121,7 +121,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     const stmts = parser.parse() catch |err| {
         if (err == error.ParseError) {
             if (flags.error_format) |fmt| {
-                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
@@ -133,7 +133,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
 
     // Type checking
     if (flags.check_only) {
-        var checker = maple.type_check.Checker.init(allocator, &parser.arena);
+        var checker = m4.type_check.Checker.init(allocator, &parser.arena);
         defer checker.deinit();
         if (flags.error_format != null) checker.diag = &diag_list;
         checker.check(stmts) catch |err| {
@@ -142,7 +142,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
         };
         if (checker.error_count > 0) {
             if (flags.error_format) |fmt| {
-                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             } else {
@@ -156,7 +156,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
 
     if (flags.format_mode) {
         for (stmts) |s| {
-            maple.fmt.formatNode(&parser.arena, s, 0);
+            m4.fmt.formatNode(&parser.arena, s, 0);
             std.debug.print("\n", .{});
         }
         return;
@@ -174,7 +174,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     compiler.compile(stmts) catch |err| {
         if (err == error.CompileError) {
             if (flags.error_format) |fmt| {
-                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
@@ -192,7 +192,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     vm.interpret(&compiler.chunk) catch |err| {
         if (err == error.RuntimeError) {
             if (flags.error_format) |fmt| {
-                const out = try maple.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
@@ -203,29 +203,29 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     };
 }
 
-fn resolveUses(vm: *VM, arena: *maple.ast.NodeArena, stmts: []const usize) !void {
+fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
     for (stmts) |stmt_idx| {
         const node = arena.get(stmt_idx);
         if (node == .use_stmt) {
             const path = node.use_stmt.path;
             if (std.mem.eql(u8, path, "io")) {
-                try maple.stdlib.io.register(vm);
+                try m4.stdlib.io.register(vm);
             }
             if (std.mem.eql(u8, path, "thread")) {
-                try maple.stdlib.thread.register(vm);
+                try m4.stdlib.thread.register(vm);
             }
         }
     }
 }
 
-fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?maple.err.Format) !void {
-    const out = try maple.err.explainError(allocator, code, format);
+fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?m4.err.Format) !void {
+    const out = try m4.err.explainError(allocator, code, format);
     defer allocator.free(out);
     std.debug.print("{s}\n", .{out});
 }
 
 fn runRepl(arena: std.mem.Allocator) !void {
-    std.debug.print("Maple v{s} REPL  (:h for help, :q to quit)\n\n", .{VERSION});
+    std.debug.print("m4 v{s} REPL  (:h for help, :q to quit)\n\n", .{VERSION});
 
     var line_buf = std.ArrayList(u8).empty;
     defer line_buf.deinit(arena);
@@ -277,8 +277,8 @@ fn runRepl(arena: std.mem.Allocator) !void {
         var vm = VM.init(arena);
         defer vm.deinit();
 
-        try maple.stdlib.io.register(&vm);
-        try maple.stdlib.thread.register(&vm);
+        try m4.stdlib.io.register(&vm);
+        try m4.stdlib.thread.register(&vm);
         try resolveUses(&vm, &parser.arena, stmts);
 
         vm.interpret(&compiler.chunk) catch |err| {
@@ -322,7 +322,7 @@ fn looksLikeCall(input: []const u8) bool {
 
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, std.Io.Limit.limited(1024 * 1024)) catch |err| {
-        std.debug.print("maple: cannot read '{s}': {}\n", .{ path, err });
+        std.debug.print("m4: cannot read '{s}': {}\n", .{ path, err });
         return err;
     };
 }
@@ -346,13 +346,13 @@ fn readStdin(allocator: std.mem.Allocator, _: std.Io) ![]const u8 {
 
 fn printHelp() void {
     std.debug.print(
-        \\Maple v{s} — statically typed, AI-native scripting language
+        \\m4 v{s} — statically typed, AI-native scripting language
         \\
         \\Usage:
-        \\  maple [flags] <file.maple>     Run file
-        \\  maple [flags] -                Run from stdin
-        \\  maple                          Launch REPL
-        \\  maple explain <code>           Explain an error code
+        \\  m4 [flags] <file.m4>     Run file
+        \\  m4 [flags] -                Run from stdin
+        \\  m4                          Launch REPL
+        \\  m4 explain <code>           Explain an error code
         \\
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
@@ -365,5 +365,5 @@ fn printHelp() void {
 }
 
 fn printVersion() void {
-    std.debug.print("Maple v{s}\n", .{VERSION});
+    std.debug.print("m4 v{s}\n", .{VERSION});
 }

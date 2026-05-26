@@ -42,7 +42,7 @@ pub fun main() i32
         age: 16
     )
     let fav_book Book = Book(
-        title: "The Maple Language"
+        title: "The m4 Language"
         author: "Edward"
         pages: 280
     )
