@@ -1,0 +1,14 @@
+[repo]
+name = "m4"
+current_version = "v0.1.2"
+next_version = "v0.2.0"
+
+[repo.branches]
+dev = "indev"
+main = "master"
+
+[gate]
+enabled = true
+checks = ["audit", "secrets", "test_rate", "memory_patterns", "deprecated_api", "no_use"]
+fail_on = ["audit", "secrets", "deprecated_api"]
+thresholds.test_pass_rate = 100

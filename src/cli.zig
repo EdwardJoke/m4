@@ -208,8 +208,14 @@ fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
         const node = arena.get(stmt_idx);
         if (node == .use_stmt) {
             const path = node.use_stmt.path;
-            if (std.mem.eql(u8, path, "io") or std.mem.eql(u8, path, "thread") or std.mem.eql(u8, path, "range") or std.mem.eql(u8, path, "std")) {
+            if (std.mem.eql(u8, path, "io")) {
+                try m4.stdlib.io.register(vm);
+            } else if (std.mem.eql(u8, path, "std")) {
                 try m4.stdlib.std.register(vm);
+            } else if (std.mem.eql(u8, path, "thread")) {
+                try m4.stdlib.thread.register(vm);
+            } else if (std.mem.eql(u8, path, "range")) {
+                try m4.stdlib.range.register(vm);
             }
         }
     }
@@ -352,6 +358,7 @@ fn printHelp() void {
         \\
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
+        \\  -f, --format                   Format source code and print
         \\  --check                        Parse and type-check only
         \\  --zon, --json, --yaml           Structured error output format
         \\  -h, --help                     Show this help

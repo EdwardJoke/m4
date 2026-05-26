@@ -277,7 +277,7 @@ pub fn run(self: *VM) !void {
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int > r.int };
                 } else {
-                    self.registers[base + d.a] = cmpSlow(.gt, l, r) catch return self.runtimeError("r005", "cannot compare non-numeric types", .{});
+                    self.registers[base + d.a] = cmpSlow(.gt, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
                 pc += 1;
             },
@@ -288,7 +288,7 @@ pub fn run(self: *VM) !void {
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int < r.int };
                 } else {
-                    self.registers[base + d.a] = cmpSlow(.lt, l, r) catch return self.runtimeError("r005", "cannot compare non-numeric types", .{});
+                    self.registers[base + d.a] = cmpSlow(.lt, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
                 pc += 1;
             },
@@ -299,7 +299,7 @@ pub fn run(self: *VM) !void {
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int >= r.int };
                 } else {
-                    self.registers[base + d.a] = cmpSlow(.gte, l, r) catch return self.runtimeError("r005", "cannot compare non-numeric types", .{});
+                    self.registers[base + d.a] = cmpSlow(.gte, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
                 pc += 1;
             },
@@ -310,7 +310,7 @@ pub fn run(self: *VM) !void {
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int <= r.int };
                 } else {
-                    self.registers[base + d.a] = cmpSlow(.lte, l, r) catch return self.runtimeError("r005", "cannot compare non-numeric types", .{});
+                    self.registers[base + d.a] = cmpSlow(.lte, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
                 pc += 1;
             },
@@ -406,22 +406,37 @@ pub fn run(self: *VM) !void {
                 const d = OpCode.decodeABC(inst);
                 const obj = self.registers[base + d.b];
                 const idx = self.registers[base + d.c];
-                if (obj == .vec and idx == .int) {
-                    const v: *VecObj = @ptrCast(@alignCast(obj.vec));
-                    const i: usize = @intCast(idx.int);
-                    if (i < v.items.items.len) {
-                        self.registers[base + d.a] = v.items.items[i];
-                    } else return self.runtimeError("r008", "index out of bounds", .{});
-                } else return self.runtimeError("r009", "cannot index non-vector value", .{});
+                if (idx != .int) return self.runtimeError("r009", "index must be an integer", .{});
+                const i: usize = @intCast(idx.int);
+                switch (obj) {
+                    .vec => {
+                        const v: *VecObj = @ptrCast(@alignCast(obj.vec));
+                        if (i < v.items.items.len) {
+                            self.registers[base + d.a] = v.items.items[i];
+                        } else return self.runtimeError("r008", "index out of bounds", .{});
+                    },
+                    .string => {
+                        if (i < obj.string.len) {
+                            self.registers[base + d.a] = .{ .char = obj.string[i] };
+                        } else return self.runtimeError("r008", "index out of bounds", .{});
+                    },
+                    else => return self.runtimeError("r009", "cannot index non-indexable value", .{}),
+                }
                 pc += 1;
             },
             .index_len => {
                 const d = OpCode.decodeABC(inst);
                 const obj = self.registers[base + d.b];
-                if (obj == .vec) {
-                    const v: *VecObj = @ptrCast(@alignCast(obj.vec));
-                    self.registers[base + d.a] = .{ .int = @intCast(v.items.items.len) };
-                } else return self.runtimeError("r009", "cannot get length of non-indexable value", .{});
+                switch (obj) {
+                    .vec => {
+                        const v: *VecObj = @ptrCast(@alignCast(obj.vec));
+                        self.registers[base + d.a] = .{ .int = @intCast(v.items.items.len) };
+                    },
+                    .string => {
+                        self.registers[base + d.a] = .{ .int = @intCast(obj.string.len) };
+                    },
+                    else => return self.runtimeError("r009", "cannot get length of non-indexable value", .{}),
+                }
                 pc += 1;
             },
             .vec_set => {
@@ -555,56 +570,45 @@ fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value) !Value.Value {
 
 fn cmpSlow(op: OpCode.OpCode, l: Value.Value, r: Value.Value) !Value.Value {
     return switch (op) {
-        .gt => switch (l) {
-            .int => |li| switch (r) {
-                .int => |ri| .{ .bool = li > ri },
-                .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) > rf },
-                else => error.RuntimeError,
-            },
-            .float => |lf| switch (r) {
-                .int => |ri| .{ .bool = lf > @as(f64, @floatFromInt(ri)) },
-                .float => |rf| .{ .bool = lf > rf },
-                else => error.RuntimeError,
-            },
-            else => error.RuntimeError,
-        },
-        .lt => switch (l) {
-            .int => |li| switch (r) {
-                .int => |ri| .{ .bool = li < ri },
-                .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) < rf },
-                else => error.RuntimeError,
-            },
-            .float => |lf| switch (r) {
-                .int => |ri| .{ .bool = lf < @as(f64, @floatFromInt(ri)) },
-                .float => |rf| .{ .bool = lf < rf },
-                else => error.RuntimeError,
-            },
-            else => error.RuntimeError,
-        },
-        .gte => switch (l) {
-            .int => |li| switch (r) {
-                .int => |ri| .{ .bool = li >= ri },
-                .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) >= rf },
-                else => error.RuntimeError,
-            },
-            .float => |lf| switch (r) {
-                .int => |ri| .{ .bool = lf >= @as(f64, @floatFromInt(ri)) },
-                .float => |rf| .{ .bool = lf >= rf },
-                else => error.RuntimeError,
+        OpCode.OpCode.gt => cmpOrder(OpCode.OpCode.gt, l, r),
+        OpCode.OpCode.lt => cmpOrder(OpCode.OpCode.lt, l, r),
+        OpCode.OpCode.gte => cmpOrder(OpCode.OpCode.gte, l, r),
+        OpCode.OpCode.lte => cmpOrder(OpCode.OpCode.lte, l, r),
+        else => error.RuntimeError,
+    };
+}
+
+fn cmpOrder(op: OpCode.OpCode, l: Value.Value, r: Value.Value) !Value.Value {
+    const order = try cmpValues(l, r);
+    return switch (op) {
+        .gt => .{ .bool = order == std.math.Order.gt },
+        .lt => .{ .bool = order == std.math.Order.lt },
+        .gte => .{ .bool = order != std.math.Order.lt },
+        .lte => .{ .bool = order != std.math.Order.gt },
+        else => error.RuntimeError,
+    };
+}
+
+fn cmpValues(l: Value.Value, r: Value.Value) !std.math.Order {
+    return switch (l) {
+        .int => |li| switch (r) {
+            .int => @as(std.math.Order, if (li < r.int) .lt else if (li > r.int) .gt else .eq),
+            .float => |rf| {
+                const lf = @as(f64, @floatFromInt(li));
+                return if (lf < rf) std.math.Order.lt else if (lf > rf) std.math.Order.gt else std.math.Order.eq;
             },
             else => error.RuntimeError,
         },
-        .lte => switch (l) {
-            .int => |li| switch (r) {
-                .int => |ri| .{ .bool = li <= ri },
-                .float => |rf| .{ .bool = @as(f64, @floatFromInt(li)) <= rf },
-                else => error.RuntimeError,
+        .float => |lf| switch (r) {
+            .int => |ri| {
+                const rf = @as(f64, @floatFromInt(ri));
+                return if (lf < rf) std.math.Order.lt else if (lf > rf) std.math.Order.gt else std.math.Order.eq;
             },
-            .float => |lf| switch (r) {
-                .int => |ri| .{ .bool = lf <= @as(f64, @floatFromInt(ri)) },
-                .float => |rf| .{ .bool = lf <= rf },
-                else => error.RuntimeError,
-            },
+            .float => |rf| if (lf < rf) std.math.Order.lt else if (lf > rf) std.math.Order.gt else std.math.Order.eq,
+            else => error.RuntimeError,
+        },
+        .string => |ls| switch (r) {
+            .string => |rs| std.mem.order(u8, ls, rs),
             else => error.RuntimeError,
         },
         else => error.RuntimeError,
