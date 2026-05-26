@@ -208,11 +208,8 @@ fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
         const node = arena.get(stmt_idx);
         if (node == .use_stmt) {
             const path = node.use_stmt.path;
-            if (std.mem.eql(u8, path, "io")) {
-                try m4.stdlib.io.register(vm);
-            }
-            if (std.mem.eql(u8, path, "thread")) {
-                try m4.stdlib.thread.register(vm);
+            if (std.mem.eql(u8, path, "io") or std.mem.eql(u8, path, "thread") or std.mem.eql(u8, path, "range") or std.mem.eql(u8, path, "std")) {
+                try m4.stdlib.std.register(vm);
             }
         }
     }
@@ -277,8 +274,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         var vm = VM.init(arena);
         defer vm.deinit();
 
-        try m4.stdlib.io.register(&vm);
-        try m4.stdlib.thread.register(&vm);
+        try m4.stdlib.std.register(&vm);
         try resolveUses(&vm, &parser.arena, stmts);
 
         vm.interpret(&compiler.chunk) catch |err| {
@@ -305,10 +301,10 @@ fn wrapReplInput(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
     // Don't wrap function calls like io.println(...) or foo(...)
     if (looksLikeCall(input)) return input;
 
-    const wrapped = try allocator.alloc(u8, "io.println(".len + input.len + ")".len);
-    @memcpy(wrapped[0.."io.println(".len], "io.println(");
-    @memcpy(wrapped["io.println(".len .. "io.println(".len + input.len], input);
-    @memcpy(wrapped["io.println(".len + input.len ..], ")");
+    const wrapped = try allocator.alloc(u8, "std.println(".len + input.len + ")".len);
+    @memcpy(wrapped[0.."std.println(".len], "std.println(");
+    @memcpy(wrapped["std.println(".len .. "std.println(".len + input.len], input);
+    @memcpy(wrapped["std.println(".len + input.len ..], ")");
     return wrapped;
 }
 

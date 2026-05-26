@@ -1,24 +1,24 @@
 # Control Flow
 # Demonstrates: if/elif/else, loop, for, continue, esc
 
-use io
+use std
 
 fun classify_temp(t i32)
     if t > 40
-        io.println("Extremely hot")
+        std.println("Extremely hot")
     elif t > 30
-        io.println("Hot")
+        std.println("Hot")
     elif t > 20
-        io.println("Warm")
+        std.println("Warm")
     elif t > 10
-        io.println("Cool")
+        std.println("Cool")
     else
-        io.println("Cold")
+        std.println("Cold")
 
 fun countdown(start i32)
     mut n i32 = start
     loop
-        io.println(n)
+        std.println(n)
         n = n - 1
 
         if n < 0
@@ -34,24 +34,24 @@ fun print_evens(limit i32)
         if n % 2 != 0
             continue
 
-        io.println(n)
+        std.println(n)
 
 pub fun main() i32
-    io.println("--- Temperature Classification ---")
+    std.println("--- Temperature Classification ---")
     classify_temp(45)
     classify_temp(35)
     classify_temp(25)
     classify_temp(15)
     classify_temp(5)
 
-    io.println("--- Countdown ---")
+    std.println("--- Countdown ---")
     countdown(5)
 
-    io.println("--- Even Numbers ---")
+    std.println("--- Even Numbers ---")
     print_evens(10)
 
-    io.println("--- For Loop ---")
+    std.println("--- For Loop ---")
     for fruit in ["apple", "banana", "cherry"]
-        io.println(fruit)
+        std.println(fruit)
 
     ret 0

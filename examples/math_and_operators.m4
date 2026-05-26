@@ -1,101 +1,101 @@
 # Math and Operators
 # Demonstrates: arithmetic, comparison, logical operators, operator precedence
 
-use io
+use std
 
 pub fun main() i32
-    io.println("--- Arithmetic ---")
+    std.println("--- Arithmetic ---")
 
     let a i32 = 10
     let b i32 = 3
 
-    io.print("a + b = ")
-    io.println(a + b)
+    std.print("a + b = ")
+    std.println(a + b)
 
-    io.print("a - b = ")
-    io.println(a - b)
+    std.print("a - b = ")
+    std.println(a - b)
 
-    io.print("a * b = ")
-    io.println(a * b)
+    std.print("a * b = ")
+    std.println(a * b)
 
-    io.print("a / b = ")
-    io.println(a / b)
+    std.print("a / b = ")
+    std.println(a / b)
 
-    io.print("a % b = ")
-    io.println(a % b)
+    std.print("a % b = ")
+    std.println(a % b)
 
-    io.println("--- Float Arithmetic ---")
+    std.println("--- Float Arithmetic ---")
 
     let pi f64 = 3.14159
     let e f64 = 2.71828
 
-    io.print("pi + e = ")
-    io.println(pi + e)
+    std.print("pi + e = ")
+    std.println(pi + e)
 
-    io.print("pi * e = ")
-    io.println(pi * e)
+    std.print("pi * e = ")
+    std.println(pi * e)
 
-    io.println("--- Comparisons ---")
+    std.println("--- Comparisons ---")
 
     let x i32 = 42
     let y i32 = 100
 
-    io.print("x == y: ")
-    io.println(x == y)
+    std.print("x == y: ")
+    std.println(x == y)
 
-    io.print("x != y: ")
-    io.println(x != y)
+    std.print("x != y: ")
+    std.println(x != y)
 
-    io.print("x > y: ")
-    io.println(x > y)
+    std.print("x > y: ")
+    std.println(x > y)
 
-    io.print("x < y: ")
-    io.println(x < y)
+    std.print("x < y: ")
+    std.println(x < y)
 
-    io.print("x >= y: ")
-    io.println(x >= y)
+    std.print("x >= y: ")
+    std.println(x >= y)
 
-    io.print("x <= y: ")
-    io.println(x <= y)
+    std.print("x <= y: ")
+    std.println(x <= y)
 
-    io.println("--- Logical Operators ---")
+    std.println("--- Logical Operators ---")
 
     let t = true
     let f = false
 
-    io.print("t && t: ")
-    io.println(t && t)
+    std.print("t && t: ")
+    std.println(t && t)
 
-    io.print("t && f: ")
-    io.println(t && f)
+    std.print("t && f: ")
+    std.println(t && f)
 
-    io.print("t || f: ")
-    io.println(t || f)
+    std.print("t || f: ")
+    std.println(t || f)
 
-    io.print("f || f: ")
-    io.println(f || f)
+    std.print("f || f: ")
+    std.println(f || f)
 
-    io.print("!t: ")
-    io.println(!t)
+    std.print("!t: ")
+    std.println(!t)
 
-    io.print("!f: ")
-    io.println(!f)
+    std.print("!f: ")
+    std.println(!f)
 
-    io.println("--- Unary Negation ---")
+    std.println("--- Unary Negation ---")
 
     let positive i32 = 5
     let negative = -positive
 
-    io.print("positive: ")
-    io.println(positive)
+    std.print("positive: ")
+    std.println(positive)
 
-    io.print("negative: ")
-    io.println(negative)
+    std.print("negative: ")
+    std.println(negative)
 
-    io.println("--- String Concatenation ---")
+    std.println("--- String Concatenation ---")
 
     let first str = "Hello"
     let last str = "World"
-    io.println(first + ", " + last + "!")
+    std.println(first + ", " + last + "!")
 
     ret 0

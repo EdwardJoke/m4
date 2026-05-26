@@ -1,7 +1,7 @@
 # Types and Variables
 # Demonstrates: all primitive types, let/mut, type annotations, type inference
 
-use io
+use std
 
 pub fun main() i32
     # Integer types
@@ -33,17 +33,17 @@ pub fun main() i32
     counter = counter + 1
 
     # Print everything
-    io.println(a)
-    io.println(b)
-    io.println(c)
-    io.println(d)
-    io.println(e)
-    io.println(f)
-    io.println(g)
-    io.println(h)
-    io.println(flag)
-    io.println(greeting)
-    io.println(inferred)
-    io.println(counter)
+    std.println(a)
+    std.println(b)
+    std.println(c)
+    std.println(d)
+    std.println(e)
+    std.println(f)
+    std.println(g)
+    std.println(h)
+    std.println(flag)
+    std.println(greeting)
+    std.println(inferred)
+    std.println(counter)
 
     ret 0

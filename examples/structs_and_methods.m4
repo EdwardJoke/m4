@@ -1,7 +1,7 @@
 # Structs and Methods
 # Demonstrates: type declarations, struct literals, field access
 
-use io
+use std
 
 type User
     name str
@@ -13,10 +13,10 @@ type Book
     pages  i32
 
 fun describe_user(u User)
-    io.print(u.name)
-    io.print(" is ")
-    io.print(u.age)
-    io.println(" years old")
+    std.print(u.name)
+    std.print(" is ")
+    std.print(u.age)
+    std.println(" years old")
 
 fun is_adult(u User) bool
     if u.age >= 18
@@ -25,12 +25,12 @@ fun is_adult(u User) bool
         ret false
 
 fun describe_book(b Book)
-    io.print(b.title)
-    io.print(" by ")
-    io.print(b.author)
-    io.print(" (")
-    io.print(b.pages)
-    io.println(" pages)")
+    std.print(b.title)
+    std.print(" by ")
+    std.print(b.author)
+    std.print(" (")
+    std.print(b.pages)
+    std.println(" pages)")
 
 pub fun main() i32
     let alice User = User(
@@ -49,12 +49,12 @@ pub fun main() i32
     describe_user(alice)
     describe_user(bob)
     if is_adult(alice)
-        io.println("Alice is an adult")
+        std.println("Alice is an adult")
     else
-        io.println("Alice is not an adult")
+        std.println("Alice is not an adult")
     if is_adult(bob)
-        io.println("Bob is an adult")
+        std.println("Bob is an adult")
     else
-        io.println("Bob is not an adult")
+        std.println("Bob is not an adult")
     describe_book(fav_book)
     ret 0

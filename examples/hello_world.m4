@@ -1,8 +1,8 @@
 # Hello, m4!
-# The simplest m4 program — just call io.println
+# The simplest m4 program — just call std.println
 
-use io
+use std
 
 pub fun main() i32
-    io.println("Hello, m4!")
+    std.println("Hello, m4!")
     ret 0

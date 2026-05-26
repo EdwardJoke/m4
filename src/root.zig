@@ -13,6 +13,8 @@ pub const object = @import("object.zig");
 pub const stdlib = struct {
     pub const io = @import("stdlib/io.zig");
     pub const thread = @import("stdlib/thread.zig");
+    pub const range = @import("stdlib/range.zig");
+    pub const std = @import("stdlib/std.zig");
 };
 pub const fmt = @import("fmt.zig");
 pub const debug = @import("debug.zig");

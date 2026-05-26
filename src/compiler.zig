@@ -414,8 +414,7 @@ pub const Compiler = struct {
                 }
                 const dr = self.allocReg();
                 try self.chunk.write(OpCode.encodeABC(.call, dr, cr, @intCast(c.args.len)), 1);
-                for (0..c.args.len) |_| self.reg_count -= 1;
-                self.reg_count -= 1;
+                self.reg_count = dr + 1;
                 return dr;
             },
             .assign => |a| {
