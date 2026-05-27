@@ -6,7 +6,7 @@
 
 The language uses 15 keywords, no braces, no semicolons — blocks are defined by indentation (like Python). It features result-based error handling (`res[T E]`), generic containers (`vec[T]`, `map[K V]`, `opt[T]`, `res[T E]`), and a register-based virtual machine.
 
-**Status:** Early development (v0.1.2). Core pipeline (scan → parse → type-check → compile → execute) is functional. Significant changes expected.
+**Status:** Early development (v0.1.2). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend in development (v0.2.0). Significant changes expected.
 
 ---
 
@@ -29,6 +29,7 @@ m4 follows a classic language pipeline:
 
 ```
 source → Scanner → tokens → Parser → AST → Type Checker → Compiler → bytecode → VM
+                                                              ↘ QBE IR → native binary
 ```
 
 ### Pipeline Stages
@@ -69,6 +70,12 @@ source → Scanner → tokens → Parser → AST → Type Checker → Compiler �
 | `src/stdlib/io.zig`      | `io.println`, `io.print`, `io.readln`, `io.read`, `io.readChar` |
 | `src/stdlib/thread.zig`  | `thread.spawn`, `thread.join`, `thread.channel`, `thread.send`, `thread.recv` |
 | `src/stdlib/range.zig`   | `range.range` — numeric range generator                       |
+| `src/qbe.zig`            | QBE IR emitter — walks AST and emits QBE SSA IR              |
+| `src/qbe_build.zig`      | QBE native binary build pipeline (compile + link)             |
+| `src/runtime/m4rt.c`     | Minimal C runtime for native-compiled m4 programs            |
+| `src/runtime/m4rt.h`     | Runtime header with type definitions and helpers               |
+| `src/runtime/qbe_wrap.c` | QBE C API wrapper for build integration                      |
+| `src/runtime/qbe_wrap.h` | QBE wrapper header                                           |
 
 ---
 
@@ -178,7 +185,8 @@ From `SPEC.md`:
 - Integers, floats, booleans, strings, nil, chars
 - Variables (`let`, `mut`), functions (`fun`), conditionals (`if`/`elif`/`else`)
 - Loops (`loop`, `for`), loop control (`continue`, `esc`)
-- String concatenation, arithmetic, comparison, logical operators
+- String concatenation, comparison, indexing, length
+- Arithmetic, comparison, logical operators
 - `std.println` / `std.print` / `std.range` native functions
 - Struct literals with named fields
 - Vectors (list literals, indexing, iteration)

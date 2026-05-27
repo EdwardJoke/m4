@@ -51,7 +51,7 @@ zig build
 ## CLI
 
 ```
-m4 v0.1.0 — statically typed, AI-native scripting language
+m4 v0.1.2 — statically typed, AI-native scripting language
 
 Usage:
   m4 [flags] <file.m4>   Run file
@@ -63,8 +63,12 @@ Flags:
   --check                      Parse and type-check only
   -f, --format                 Pretty-print source
   --error-format=zon|json|yaml Structured error output format
+  --native                     Emit QBE IR instead of running via bytecode VM
   -h, --help                   Show this help
   -v, --version                Show version
+
+Subcommands:
+  build <file.m4> [opts]       Compile to native binary via QBE
 ```
 
 ## Language Overview
@@ -173,13 +177,23 @@ src/
 ├── debug.zig         — Bytecode disassembler
 ├── error.zig         — Structured diagnostic system (ZON/JSON/YAML)
 ├── root.zig          — Module root re-exporting public declarations
-└── stdlib/
-    └── io.zig        — Standard I/O native functions (print, println)
+    ├── qbe.zig          — QBE IR emitter for native compilation
+    ├── qbe_build.zig    — QBE native binary build pipeline
+    ├── runtime/
+    │   ├── m4rt.c       — Minimal C runtime for native-compiled programs
+    │   ├── m4rt.h       — Runtime header with type definitions
+    │   ├── qbe_wrap.c   — QBE C API wrapper
+    │   └── qbe_wrap.h   — QBE wrapper header
+    └── stdlib/
+        ├── io.zig       — Standard I/O (print, println, readln, read, readChar)
+        ├── std.zig      — Core stdlib (println, print, readln, read, range)
+        ├── thread.zig   — Threading primitives (spawn, join, channel, send, recv)
+        └── range.zig    — Numeric range generator
 ```
 
 ## Status
 
-m4 is in **early development** (v0.1.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, but the language and runtime are minimal. Expect significant changes and additions.
+m4 is in **early development** (v0.1.2). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend in development. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
@@ -187,20 +201,27 @@ m4 is in **early development** (v0.1.0). The core pipeline (scan → parse → t
 - Integers, floats, booleans, strings, nil, chars
 - Variables (`let`, `mut`), functions (`fun`), conditionals (`if`/`elif`/`else`)
 - Loops (`loop`, `for`), loop control (`continue`, `esc`)
-- String concatenation, arithmetic, comparison, logical operators
-- `io.println` / `io.print` native functions
+- String concat, comparison, indexing, length
+- Arithmetic, comparison, logical operators
+- `io.println` / `io.print` / `io.readln` / `io.read` / `io.readChar`
+- `std.println` / `std.print` / `std.readln` / `std.read` / `std.range`
+- `thread.spawn` / `thread.join` / channels
+- `range.range` — numeric range generator
 - Struct literals with named fields
 - Vectors (list literals, indexing, iteration)
 - Error propagation with `?`
 - Canonical formatter
 - Bytecode disassembler
 - Structured diagnostics (ZON, JSON, YAML)
+- Error code explainer (`m4 explain r001`)
+- QBE backend: IR emitter and native binary pipeline (in development)
+- Benchmarks vs Python/TypeScript
 
 ### Not Yet Implemented
 - Full standard library (`fs`, `net`, `json`, `time`, etc.)
 - Result type runtime support
-- Modules beyond `io`
-- AOT compilation / Cranelift JIT backend
+- Modules beyond `std` / `io` / `thread` / `range`
+- Cranelift JIT backend
 - Ownership-lite memory model
 - Package manager
 
@@ -210,7 +231,7 @@ MIT
 
 ## Thanks
 
-This project is build on open-source project:
+This project is built on open-source projects:
 
-Thanks c9x's QBE compiler backend. [License](/qbe/LICENSE)
+Thanks c9x's QBE compiler backend. [License](qbe/LICENSE)
 Thanks Zig programming language.

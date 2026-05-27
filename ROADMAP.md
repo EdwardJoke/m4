@@ -24,7 +24,7 @@ source → Scanner → tokens → Parser → AST → Type Checker → Compiler �
 
 The language implements 15 keywords, indentation-sensitive blocks, Pratt parsing, a register-based bytecode VM, and a scope-chain type checker. String operations (concat, comparison, indexing, length) were recently added.
 
-**The compiler is currently a single binary with no separate IR or intermediate representation beyond the AST.** This is both a strength (simplicity) and a constraint (the self-hosted compiler must re-implement every stage).
+**The compiler can emit QBE SSA IR as an alternative backend path (v0.2.0), producing native binaries via QBE's code generator.** The bytecode VM path remains the primary execution mode. This is both a strength (simplicity) and a constraint (the self-hosted compiler must re-implement every stage).
 
 ---
 
