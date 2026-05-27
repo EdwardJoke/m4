@@ -43,6 +43,43 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    // QBE compiler backend — compiled as a static C library
+    // Uses the Zig build system Module API to compile QBE C sources
+    // Compile ALL arch targets so qbe_wrap.c can select at runtime
+    const qbe_common_srcs: []const []const u8 = &.{
+        "util.c", "parse.c", "abi.c", "cfg.c", "mem.c", "ssa.c",
+        "alias.c", "load.c", "copy.c", "fold.c", "gvn.c", "gcm.c",
+        "simpl.c", "ifopt.c", "live.c", "spill.c", "rega.c", "emit.c",
+    };
+    const qbe_all_arch_srcs: []const []const u8 = &.{
+        "amd64/targ.c", "amd64/sysv.c", "amd64/isel.c", "amd64/emit.c", "amd64/winabi.c",
+        "arm64/targ.c",  "arm64/abi.c",  "arm64/isel.c",  "arm64/emit.c",
+        "rv64/targ.c",   "rv64/abi.c",   "rv64/isel.c",   "rv64/emit.c",
+    };
+
+    const qbe_mod = b.createModule(.{
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    qbe_mod.addIncludePath(b.path("qbe"));
+    // Add all arch include paths
+    qbe_mod.addIncludePath(b.path("qbe/amd64"));
+    qbe_mod.addIncludePath(b.path("qbe/arm64"));
+    qbe_mod.addIncludePath(b.path("qbe/rv64"));
+    for (qbe_common_srcs) |src| {
+        qbe_mod.addCSourceFile(.{ .file = b.path(b.fmt("qbe/{s}", .{src})), .flags = &.{"-std=c99"} });
+    }
+    for (qbe_all_arch_srcs) |src| {
+        qbe_mod.addCSourceFile(.{ .file = b.path(b.fmt("qbe/{s}", .{src})), .flags = &.{"-std=c99"} });
+    }
+
+    const qbe_lib = b.addLibrary(.{
+        .name = "qbe",
+        .root_module = qbe_mod,
+    });
+
     // Here we define an executable. An executable needs to have a root module
     // which needs to expose a `main` function. While we could add a main function
     // to the module defined above, it's sometimes preferable to split business
@@ -59,26 +96,36 @@ pub fn build(b: *std.Build) void {
     //
     // If neither case applies to you, feel free to delete the declaration you
     // don't need and to put everything under a single module.
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "m4", .module = mod },
+            .{ .name = "serde", .module = serde_mod },
+        },
+    });
+    // Link the QBE backend for native code compilation
+    exe_mod.linkLibrary(qbe_lib);
+
+    // QBE compilation wrapper — exposes qbe_compile_ssa() for end-to-end build
+    qbe_mod.addCSourceFile(.{ .file = b.path("src/runtime/qbe_wrap.c"), .flags = &.{"-std=c99"} });
+
+    // m4 runtime stubs for QBE backend — C source compiled and linked
+    const rt_mod = b.createModule(.{
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    rt_mod.addIncludePath(b.path("src/runtime"));
+    rt_mod.addCSourceFile(.{ .file = b.path("src/runtime/m4rt.c"), .flags = &.{"-std=c99"} });
+    const rt_lib = b.addLibrary(.{ .name = "m4rt", .root_module = rt_mod });
+    exe_mod.linkLibrary(rt_lib);
+
     const exe = b.addExecutable(.{
         .name = "m4",
-        .root_module = b.createModule(.{
-            // b.createModule defines a new module just like b.addModule but,
-            // unlike b.addModule, it does not expose the module to consumers of
-            // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/main.zig"),
-            // Target and optimization levels must be explicitly wired in when
-            // defining an executable or library (in the root module), and you
-            // can also hardcode a specific target for an executable or library
-            // definition if desireable (e.g. firmware for embedded devices).
-            .target = target,
-            .optimize = optimize,
-            // List of modules available for import in source files part of the
-            // root module.
-            .imports = &.{
-                .{ .name = "m4", .module = mod },
-                .{ .name = "serde", .module = serde_mod },
-            },
-        }),
+        .root_module = exe_mod,
     });
 
     // This declares intent for the executable to be installed into the

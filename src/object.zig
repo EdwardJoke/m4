@@ -16,6 +16,10 @@ pub const MapObj = struct {
     entries: std.StringHashMap(Value.Value),
 };
 
+pub const StringBuilderObj = struct {
+    buf: std.ArrayList(u8),
+};
+
 pub const StructObj = struct {
     fields: std.StringHashMap(Value.Value),
 };

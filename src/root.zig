@@ -17,6 +17,8 @@ pub const stdlib = struct {
     pub const std = @import("stdlib/std.zig");
 };
 pub const fmt = @import("fmt.zig");
+pub const qbe = @import("qbe.zig");
+pub const qbe_build = @import("qbe_build.zig");
 pub const debug = @import("debug.zig");
 pub const err = @import("error.zig");
 

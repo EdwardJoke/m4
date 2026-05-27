@@ -114,6 +114,7 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
         .float => a.float == b.float,
         .char => a.char == b.char,
         .string => std.mem.eql(u8, a.string, b.string),
+        .string_builder => false,
         .@"fn" => a.@"fn" == b.@"fn",
         .fun_obj => a.fun_obj == b.fun_obj,
         .vec => a.vec == b.vec,
@@ -193,8 +194,10 @@ pub fn run(self: *VM) !void {
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = a.int + b.int };
+                } else if ((a == .string or a == .string_builder) and (b == .string or b == .string_builder)) {
+                    self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r012", "out of memory", .{});
                 } else {
-                    self.registers[base + d.a] = binaryOp(.add, a, b) catch return self.runtimeError("r002", "type mismatch in + operation", .{});
+                    self.registers[base + d.a] = binaryOp(.add, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in + operation", .{});
                 }
                 pc += 1;
             },
@@ -205,7 +208,7 @@ pub fn run(self: *VM) !void {
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = a.int - b.int };
                 } else {
-                    self.registers[base + d.a] = binaryOp(.sub, a, b) catch return self.runtimeError("r002", "type mismatch in - operation", .{});
+                    self.registers[base + d.a] = binaryOp(.sub, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in - operation", .{});
                 }
                 pc += 1;
             },
@@ -216,7 +219,7 @@ pub fn run(self: *VM) !void {
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = a.int * b.int };
                 } else {
-                    self.registers[base + d.a] = binaryOp(.mul, a, b) catch return self.runtimeError("r002", "type mismatch in * operation", .{});
+                    self.registers[base + d.a] = binaryOp(.mul, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in * operation", .{});
                 }
                 pc += 1;
             },
@@ -227,7 +230,7 @@ pub fn run(self: *VM) !void {
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = @divTrunc(a.int, b.int) };
                 } else {
-                    self.registers[base + d.a] = binaryOp(.div_op, a, b) catch return self.runtimeError("r002", "type mismatch in / operation", .{});
+                    self.registers[base + d.a] = binaryOp(.div_op, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in / operation", .{});
                 }
                 pc += 1;
             },
@@ -262,12 +265,22 @@ pub fn run(self: *VM) !void {
             // ── Comparisons: int-int fast path ────────────────────────
             .eq => {
                 const d = OpCode.decodeABC(inst);
-                self.registers[base + d.a] = .{ .bool = fastEql(self.registers[base + d.b], self.registers[base + d.c]) };
+                const a_val = self.registers[base + d.b];
+                const b_val = self.registers[base + d.c];
+                self.registers[base + d.a] = if (isStringLike(a_val) or isStringLike(b_val))
+                    .{ .bool = std.mem.eql(u8, stringSlice(a_val), stringSlice(b_val)) }
+                else
+                    .{ .bool = fastEql(a_val, b_val) };
                 pc += 1;
             },
             .neq => {
                 const d = OpCode.decodeABC(inst);
-                self.registers[base + d.a] = .{ .bool = !fastEql(self.registers[base + d.b], self.registers[base + d.c]) };
+                const a_val = self.registers[base + d.b];
+                const b_val = self.registers[base + d.c];
+                self.registers[base + d.a] = if (isStringLike(a_val) or isStringLike(b_val))
+                    .{ .bool = !std.mem.eql(u8, stringSlice(a_val), stringSlice(b_val)) }
+                else
+                    .{ .bool = !fastEql(a_val, b_val) };
                 pc += 1;
             },
             .gt => {
@@ -276,6 +289,8 @@ pub fn run(self: *VM) !void {
                 const r = self.registers[base + d.c];
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int > r.int };
+                } else if (isStringLike(l) and isStringLike(r)) {
+                    self.registers[base + d.a] = try cmpSlow(.gt, l, r);
                 } else {
                     self.registers[base + d.a] = cmpSlow(.gt, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
@@ -287,6 +302,8 @@ pub fn run(self: *VM) !void {
                 const r = self.registers[base + d.c];
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int < r.int };
+                } else if (isStringLike(l) and isStringLike(r)) {
+                    self.registers[base + d.a] = try cmpSlow(.lt, l, r);
                 } else {
                     self.registers[base + d.a] = cmpSlow(.lt, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
@@ -298,6 +315,8 @@ pub fn run(self: *VM) !void {
                 const r = self.registers[base + d.c];
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int >= r.int };
+                } else if (isStringLike(l) and isStringLike(r)) {
+                    self.registers[base + d.a] = try cmpSlow(.gte, l, r);
                 } else {
                     self.registers[base + d.a] = cmpSlow(.gte, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
@@ -309,6 +328,8 @@ pub fn run(self: *VM) !void {
                 const r = self.registers[base + d.c];
                 if (l == .int and r == .int) {
                     self.registers[base + d.a] = .{ .bool = l.int <= r.int };
+                } else if (isStringLike(l) and isStringLike(r)) {
+                    self.registers[base + d.a] = try cmpSlow(.lte, l, r);
                 } else {
                     self.registers[base + d.a] = cmpSlow(.lte, l, r) catch return self.runtimeError("r005", "cannot compare values of different types", .{});
                 }
@@ -371,6 +392,14 @@ pub fn run(self: *VM) !void {
                     pc = 0;
                 } else if (callee == .@"fn") {
                     const native: NativeFn = @ptrCast(@alignCast(callee.@"fn"));
+                    // Finalize any string_builder args to plain strings before native call
+                    for (0..dec.c) |i| {
+                        const arg_reg = base + dec.b + 1 + i;
+                        if (self.registers[arg_reg] == .string_builder) {
+                            const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(self.registers[arg_reg].string_builder));
+                            self.registers[arg_reg] = .{ .string = sb.buf.items };
+                        }
+                    }
                     const result = native(self, self.registers[(base + dec.b + 1) .. (base + dec.b + 1 + dec.c)]);
                     self.registers[base + dec.a] = result;
                     pc += 1;
@@ -420,6 +449,12 @@ pub fn run(self: *VM) !void {
                             self.registers[base + d.a] = .{ .char = obj.string[i] };
                         } else return self.runtimeError("r008", "index out of bounds", .{});
                     },
+                    .string_builder => {
+                        const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(obj.string_builder));
+                        if (i < sb.buf.items.len) {
+                            self.registers[base + d.a] = .{ .char = sb.buf.items[i] };
+                        } else return self.runtimeError("r008", "index out of bounds", .{});
+                    },
                     else => return self.runtimeError("r009", "cannot index non-indexable value", .{}),
                 }
                 pc += 1;
@@ -434,6 +469,10 @@ pub fn run(self: *VM) !void {
                     },
                     .string => {
                         self.registers[base + d.a] = .{ .int = @intCast(obj.string.len) };
+                    },
+                    .string_builder => {
+                        const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(obj.string_builder));
+                        self.registers[base + d.a] = .{ .int = @intCast(sb.buf.items.len) };
                     },
                     else => return self.runtimeError("r009", "cannot get length of non-indexable value", .{}),
                 }
@@ -492,35 +531,58 @@ pub fn run(self: *VM) !void {
     self.chunk = frame.chunk;
 }
 
-fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value) !Value.Value {
+fn concatStrings(allocator: std.mem.Allocator, a: Value.Value, b: Value.Value) !Value.Value {
+    const b_slice = stringSlice(b);
+    // If left operand is already a StringBuilder, append to it — this is the hot path for repeated "s = s + \"a\""
+    if (a == .string_builder) {
+        const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(a.string_builder));
+        try sb.buf.appendSlice(allocator, b_slice);
+        return a;
+    }
+    // If right operand is a StringBuilder but left isn't, prepend left to it
+    if (b == .string_builder) {
+        const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(b.string_builder));
+        const a_slice = stringSlice(a);
+        try sb.buf.insertSlice(allocator, 0, a_slice);
+        return b;
+    }
+    // Both are .string — create a brand new StringBuilder with over-allocation
+    const sb = try allocator.create(Object.StringBuilderObj);
+    const a_slice = stringSlice(a);
+    const cap = a_slice.len + b_slice.len + @max(a_slice.len, b_slice.len);
+    sb.buf = try std.ArrayList(u8).initCapacity(allocator, cap);
+    sb.buf.appendSliceAssumeCapacity(a_slice);
+    sb.buf.appendSliceAssumeCapacity(b_slice);
+    return .{ .string_builder = sb };
+}
+
+inline fn isStringLike(v: Value.Value) bool {
+    return v == .string or v == .string_builder;
+}
+
+fn stringSlice(v: Value.Value) []const u8 {
+    return switch (v) {
+        .string => |s| s,
+        .string_builder => blk: {
+            const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(v.string_builder));
+            break :blk sb.buf.items;
+        },
+        else => unreachable,
+    };
+}
+
+fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value, allocator: std.mem.Allocator) !Value.Value {
+    _ = allocator;
     return switch (op) {
         .add => switch (a) {
             .int => |ai| switch (b) {
                 .int => |bi| .{ .int = ai + bi },
                 .float => |bf| .{ .float = @as(f64, @floatFromInt(ai)) + bf },
-                .string => |as| switch (b) {
-                    .string => |bs| blk: {
-                        const buf = try std.heap.page_allocator.alloc(u8, as.len + bs.len);
-                        @memcpy(buf[0..as.len], as);
-                        @memcpy(buf[as.len..], bs);
-                        break :blk .{ .string = buf };
-                    },
-                    else => error.RuntimeError,
-                },
                 else => error.RuntimeError,
             },
             .float => |af| switch (b) {
                 .int => |bi| .{ .float = af + @as(f64, @floatFromInt(bi)) },
                 .float => |bf| .{ .float = af + bf },
-                else => error.RuntimeError,
-            },
-            .string => |as| switch (b) {
-                .string => |bs| blk: {
-                    const buf = try std.heap.page_allocator.alloc(u8, as.len + bs.len);
-                    @memcpy(buf[0..as.len], as);
-                    @memcpy(buf[as.len..], bs);
-                    break :blk .{ .string = buf };
-                },
                 else => error.RuntimeError,
             },
             else => error.RuntimeError,
@@ -607,8 +669,8 @@ fn cmpValues(l: Value.Value, r: Value.Value) !std.math.Order {
             .float => |rf| if (lf < rf) std.math.Order.lt else if (lf > rf) std.math.Order.gt else std.math.Order.eq,
             else => error.RuntimeError,
         },
-        .string => |ls| switch (r) {
-            .string => |rs| std.mem.order(u8, ls, rs),
+        .string_builder, .string => switch (r) {
+            .string_builder, .string => std.mem.order(u8, stringSlice(l), stringSlice(r)),
             else => error.RuntimeError,
         },
         else => error.RuntimeError,
@@ -616,3 +678,163 @@ fn cmpValues(l: Value.Value, r: Value.Value) !std.math.Order {
 }
 
 const VecObj = struct { items: std.ArrayList(Value.Value), };
+
+test "vm: string equality comparison" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_abc = try chunk.addConstant(.{ .string = "abc" });
+    const idx_abd = try chunk.addConstant(.{ .string = "abd" });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_abc), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_abd), 1);
+    try chunk.write(OpCode.encodeABC(.eq, 2, 0, 1), 1); // r2 = "abc" == "abd" → false
+    try chunk.write(OpCode.encodeABC(.neq, 3, 0, 1), 1); // r3 = "abc" != "abd" → true
+    try chunk.write(OpCode.encodeABC(.eq, 4, 0, 0), 1); // r4 = "abc" == "abc" → true
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try vm.interpret(&chunk);
+
+    try std.testing.expect(!vm.registers[2].bool);
+    try std.testing.expect(vm.registers[3].bool);
+    try std.testing.expect(vm.registers[4].bool);
+}
+
+test "vm: string ordering comparison" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_abc = try chunk.addConstant(.{ .string = "abc" });
+    const idx_abd = try chunk.addConstant(.{ .string = "abd" });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_abc), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_abd), 1);
+
+    try chunk.write(OpCode.encodeABC(.lt, 2, 0, 1), 1); // r2 = "abc" < "abd" → true
+    try chunk.write(OpCode.encodeABC(.gt, 3, 0, 1), 1); // r3 = "abc" > "abd" → false
+    try chunk.write(OpCode.encodeABC(.lte, 4, 0, 1), 1); // r4 = "abc" <= "abd" → true
+    try chunk.write(OpCode.encodeABC(.gte, 5, 0, 1), 1); // r5 = "abc" >= "abd" → false
+    try chunk.write(OpCode.encodeABC(.lte, 6, 0, 0), 1); // r6 = "abc" <= "abc" → true
+    try chunk.write(OpCode.encodeABC(.gte, 7, 0, 0), 1); // r7 = "abc" >= "abc" → true
+    try chunk.write(OpCode.encodeABC(.lt, 8, 1, 0), 1); // r8 = "abd" < "abc" → false
+
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try vm.interpret(&chunk);
+
+    try std.testing.expect(vm.registers[2].bool);
+    try std.testing.expect(!vm.registers[3].bool);
+    try std.testing.expect(vm.registers[4].bool);
+    try std.testing.expect(!vm.registers[5].bool);
+    try std.testing.expect(vm.registers[6].bool);
+    try std.testing.expect(vm.registers[7].bool);
+    try std.testing.expect(!vm.registers[8].bool);
+}
+
+test "vm: string length" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_hello = try chunk.addConstant(.{ .string = "hello" });
+    const idx_empty = try chunk.addConstant(.{ .string = "" });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_hello), 1);
+    try chunk.write(OpCode.encodeABC(.index_len, 1, 0, 0), 1); // r1 = len("hello") = 5
+    try chunk.write(OpCode.encodeABx(.load_const, 2, idx_empty), 1);
+    try chunk.write(OpCode.encodeABC(.index_len, 3, 2, 0), 1); // r3 = len("") = 0
+
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try vm.interpret(&chunk);
+
+    try std.testing.expectEqual(@as(i64, 5), vm.registers[1].int);
+    try std.testing.expectEqual(@as(i64, 0), vm.registers[3].int);
+}
+
+test "vm: string indexing" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_hello = try chunk.addConstant(.{ .string = "hello" });
+    const idx_0 = try chunk.addConstant(.{ .int = 0 });
+    const idx_1 = try chunk.addConstant(.{ .int = 1 });
+    const idx_4 = try chunk.addConstant(.{ .int = 4 });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_hello), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_0), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 2, idx_1), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 3, idx_4), 1);
+
+    try chunk.write(OpCode.encodeABC(.index_get, 4, 0, 1), 1); // r4 = "hello"[0] = 'h'
+    try chunk.write(OpCode.encodeABC(.index_get, 5, 0, 2), 1); // r5 = "hello"[1] = 'e'
+    try chunk.write(OpCode.encodeABC(.index_get, 6, 0, 3), 1); // r6 = "hello"[4] = 'o'
+
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try vm.interpret(&chunk);
+
+    try std.testing.expectEqual(@as(u8, 'h'), vm.registers[4].char);
+    try std.testing.expectEqual(@as(u8, 'e'), vm.registers[5].char);
+    try std.testing.expectEqual(@as(u8, 'o'), vm.registers[6].char);
+}
+
+test "vm: string indexing out of bounds" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_hi = try chunk.addConstant(.{ .string = "hi" });
+    const idx_99 = try chunk.addConstant(.{ .int = 99 });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_hi), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_99), 1);
+    try chunk.write(OpCode.encodeABC(.index_get, 2, 0, 1), 1); // r2 = "hi"[99] → out of bounds
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try std.testing.expectError(error.RuntimeError, vm.interpret(&chunk));
+}
+
+test "vm: string concatenation" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_hello = try chunk.addConstant(.{ .string = "hello" });
+    const idx_world = try chunk.addConstant(.{ .string = " world" });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_hello), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_world), 1);
+    try chunk.write(OpCode.encodeABC(.add, 0, 0, 1), 1); // r0 = "hello" + " world"
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try vm.interpret(&chunk);
+
+    try std.testing.expectEqualStrings("hello world", vm.registers[0].string);
+}
+
+test "vm: string type mismatch on comparison" {
+    var chunk = Chunk.init(std.testing.allocator);
+    defer chunk.deinit();
+
+    const idx_str = try chunk.addConstant(.{ .string = "hello" });
+    const idx_int = try chunk.addConstant(.{ .int = 42 });
+
+    try chunk.write(OpCode.encodeABx(.load_const, 0, idx_str), 1);
+    try chunk.write(OpCode.encodeABx(.load_const, 1, idx_int), 1);
+    try chunk.write(OpCode.encodeABC(.lt, 2, 0, 1), 1); // r2 = "hello" < 42 → type mismatch error
+    try chunk.write(OpCode.encodeAx(.halt, 0), 1);
+
+    var vm = VM.init(std.testing.allocator);
+    defer vm.deinit();
+    try std.testing.expectError(error.RuntimeError, vm.interpret(&chunk));
+}

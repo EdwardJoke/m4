@@ -207,3 +207,10 @@ m4 is in **early development** (v0.1.0). The core pipeline (scan → parse → t
 ## License
 
 MIT
+
+## Thanks
+
+This project is build on open-source project:
+
+Thanks c9x's QBE compiler backend. [License](/qbe/LICENSE)
+Thanks Zig programming language.

@@ -5,3 +5,6 @@ zig-pkg/
 
 # MacOS
 .DS_Store
+
+# m4 self cache
+.m4_cache/

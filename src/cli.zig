@@ -14,7 +14,11 @@ const Flags = struct {
     debug_mode: bool = false,
     check_only: bool = false,
     format_mode: bool = false,
+    native_mode: bool = false,
+    build_mode: bool = false,
     file_path: ?[]const u8 = null,
+    output_path: ?[]const u8 = null,
+    build_target: ?[]const u8 = null,
     should_exit: bool = false,
     error_format: ?m4.err.Format = null,
     explain_code: ?[]const u8 = null,
@@ -29,6 +33,15 @@ pub fn run(init: std.process.Init) !void {
 
     if (flags.explain_code) |code| {
         try runExplain(arena_alloc, code, flags.error_format);
+        return;
+    }
+
+    if (flags.build_mode) {
+        if (flags.file_path) |path| {
+            try runBuild(arena_alloc, init.io, path, flags);
+        } else {
+            std.debug.print("m4 build: missing file path. Usage: m4 build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+        }
         return;
     }
 
@@ -75,6 +88,10 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.format_mode = true;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--native")) {
+            flags.native_mode = true;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--zon")) {
             flags.error_format = .zon;
             continue;
@@ -97,6 +114,38 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.explain_code = args[i];
             continue;
         }
+        // 'build' subcommand — compile to native binary
+        if (std.mem.eql(u8, arg, "build")) {
+            flags.build_mode = true;
+            i += 1;
+            // Parse remaining arguments for the build subcommand
+            while (i < args.len) : (i += 1) {
+                const sub = args[i];
+                if (std.mem.eql(u8, sub, "-o") or std.mem.eql(u8, sub, "--output")) {
+                    if (i + 1 >= args.len) {
+                        std.debug.print("m4: --output requires a path argument\n", .{});
+                        return error.InvalidFlag;
+                    }
+                    i += 1;
+                    flags.output_path = args[i];
+                } else if (std.mem.eql(u8, sub, "-target") or std.mem.eql(u8, sub, "--target")) {
+                    if (i + 1 >= args.len) {
+                        std.debug.print("m4: --target requires an architecture name\n", .{});
+                        return error.InvalidFlag;
+                    }
+                    i += 1;
+                    flags.build_target = args[i];
+                } else if (!std.mem.startsWith(u8, sub, "-")) {
+                    flags.file_path = sub;
+                } else {
+                    std.debug.print("m4: unknown build flag '{s}'\n", .{sub});
+                    std.debug.print("Usage: m4 build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+                    return error.InvalidFlag;
+                }
+            }
+            continue;
+        }
+
         if (!std.mem.startsWith(u8, arg, "-")) {
             flags.file_path = arg;
             continue;
@@ -132,6 +181,21 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     };
 
     // Type checking
+    if (flags.native_mode) {
+        // Emit QBE IR instead of running via bytecode VM
+        if (flags.error_format != null) {
+            std.debug.print("m4: --native does not support structured error output yet\n", .{});
+            return;
+        }
+        const qbe_ir = try m4.qbe.emitProgram(allocator, &parser.arena, stmts, .{});
+        defer allocator.free(qbe_ir);
+        if (flags.file_path) |path| {
+            std.debug.print("// QBE IR for: {s}\n", .{path});
+        }
+        std.debug.print("{s}", .{qbe_ir});
+        return;
+    }
+
     if (flags.check_only) {
         var checker = m4.type_check.Checker.init(allocator, &parser.arena);
         defer checker.deinit();
@@ -322,6 +386,32 @@ fn looksLikeCall(input: []const u8) bool {
     return false;
 }
 
+fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Flags) !void {
+    const source = try readFile(allocator, io, path);
+
+    const output_path = flags.output_path orelse blk: {
+        // Derive output name from input: replace .m4 extension or add .out
+        if (std.mem.lastIndexOf(u8, path, ".")) |dot| {
+            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path[0..dot]});
+        } else {
+            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path});
+        }
+    };
+
+    std.debug.print("m4 build: compiling '{s}' -> '{s}'\n", .{ path, output_path });
+
+    const result = try m4.qbe_build.buildNative(
+        allocator,
+        io,
+        source,
+        output_path,
+        flags.build_target,
+    );
+    _ = result;
+
+    std.debug.print("m4 build: done -> '{s}'\n", .{output_path});
+}
+
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, std.Io.Limit.limited(1024 * 1024)) catch |err| {
         std.debug.print("m4: cannot read '{s}': {}\n", .{ path, err });
@@ -351,18 +441,24 @@ fn printHelp() void {
         \\m4 v{s} — statically typed, AI-native scripting language
         \\
         \\Usage:
-        \\  m4 [flags] <file.m4>     Run file
-        \\  m4 [flags] -                Run from stdin
-        \\  m4                          Launch REPL
-        \\  m4 explain <code>           Explain an error code
+        \\  m4 [flags] <file.m4>          Run file
+        \\  m4 [flags] -                  Run from stdin
+        \\  m4                            Launch REPL
+        \\  m4 build <file.m4> [opts]     Compile to native binary
+        \\  m4 explain <code>             Explain an error code
         \\
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
         \\  -f, --format                   Format source code and print
+        \\  --native                       Emit QBE IR instead of running via bytecode VM
         \\  --check                        Parse and type-check only
         \\  --zon, --json, --yaml           Structured error output format
         \\  -h, --help                     Show this help
         \\  -v, --version                  Show version
+        \\
+        \\Build options:
+        \\  -o, --output <path>            Output binary path (default: <file>.out)
+        \\  -target, --target <arch>       Target architecture (amd64_apple, arm64, rv64, ...)
         \\
     , .{VERSION});
 }
