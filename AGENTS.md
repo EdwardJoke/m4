@@ -177,7 +177,7 @@ From `SPEC.md`:
 
 ---
 
-## Current State (v0.1.2)
+## Current State (v0.2.0)
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

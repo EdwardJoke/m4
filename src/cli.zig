@@ -2,6 +2,8 @@ const std = @import("std");
 const posix = std.posix;
 const m4 = @import("m4");
 const build_options = @import("build_options");
+const serde = @import("serde");
+const cli_info = @import("cli_info.zig");
 
 const Parser = m4.Parser;
 const Compiler = m4.Compiler;
@@ -21,8 +23,19 @@ const Flags = struct {
     build_target: ?[]const u8 = null,
     should_exit: bool = false,
     error_format: ?m4.err.Format = null,
+    output_format: ?m4.err.Format = null,
     explain_code: ?[]const u8 = null,
+    help_mode: bool = false,
+    version_mode: bool = false,
 };
+
+// ── Structured help metadata (re-exported from cli_info.zig) ──────
+
+pub const FlagInfo = cli_info.FlagInfo;
+pub const SubcommandInfo = cli_info.SubcommandInfo;
+pub const UsageMode = cli_info.UsageMode;
+pub const HelpInfo = cli_info.HelpInfo;
+pub const VersionInfo = cli_info.VersionInfo;
 
 pub fn run(init: std.process.Init) !void {
     const arena_alloc = init.arena.allocator();
@@ -30,6 +43,16 @@ pub fn run(init: std.process.Init) !void {
 
     const flags = try parseFlags(args);
     if (flags.should_exit) return;
+
+    if (flags.help_mode) {
+        try runHelp(arena_alloc, flags.output_format);
+        return;
+    }
+
+    if (flags.version_mode) {
+        try runVersion(arena_alloc, flags.output_format);
+        return;
+    }
 
     if (flags.explain_code) |code| {
         try runExplain(arena_alloc, code, flags.error_format);
@@ -63,13 +86,49 @@ fn parseFlags(args: []const []const u8) !Flags {
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
-        if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            printHelp();
-            return Flags{ .should_exit = true };
+        // 'help' subcommand — show CLI help (text or structured)
+        if (std.mem.eql(u8, arg, "help")) {
+            flags.help_mode = true;
+            i += 1;
+            while (i < args.len) : (i += 1) {
+                const sub = args[i];
+                if (std.mem.eql(u8, sub, "--zon")) {
+                    flags.output_format = .zon;
+                } else if (std.mem.eql(u8, sub, "--json")) {
+                    flags.output_format = .json;
+                } else if (std.mem.eql(u8, sub, "--yaml")) {
+                    flags.output_format = .yaml;
+                } else if (!std.mem.startsWith(u8, sub, "-")) {
+                    std.debug.print("m4: 'help' takes no positional arguments. Try 'm4 help' or 'm4 help --json'.\n", .{});
+                    return error.InvalidFlag;
+                } else {
+                    std.debug.print("m4: unknown help flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
+                    return error.InvalidFlag;
+                }
+            }
+            continue;
         }
-        if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
-            printVersion();
-            return Flags{ .should_exit = true };
+        // 'version' subcommand — show version (text or structured)
+        if (std.mem.eql(u8, arg, "version")) {
+            flags.version_mode = true;
+            i += 1;
+            while (i < args.len) : (i += 1) {
+                const sub = args[i];
+                if (std.mem.eql(u8, sub, "--zon")) {
+                    flags.output_format = .zon;
+                } else if (std.mem.eql(u8, sub, "--json")) {
+                    flags.output_format = .json;
+                } else if (std.mem.eql(u8, sub, "--yaml")) {
+                    flags.output_format = .yaml;
+                } else if (!std.mem.startsWith(u8, sub, "-")) {
+                    std.debug.print("m4: 'version' takes no positional arguments. Try 'm4 version' or 'm4 version --json'.\n", .{});
+                    return error.InvalidFlag;
+                } else {
+                    std.debug.print("m4: unknown version flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
+                    return error.InvalidFlag;
+                }
+            }
+            continue;
         }
         // Special: "-" means stdin
         if (std.mem.eql(u8, arg, "-")) {
@@ -151,7 +210,7 @@ fn parseFlags(args: []const []const u8) !Flags {
             continue;
         }
         std.debug.print("m4: unknown flag '{s}'\n", .{arg});
-        std.debug.print("Try 'm4 --help' for usage.\n", .{});
+        std.debug.print("Try 'm4 help' for usage.\n", .{});
         return error.InvalidFlag;
     }
     return flags;
@@ -291,8 +350,102 @@ fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?m4.err.Fo
     std.debug.print("{s}\n", .{out});
 }
 
+fn runHelp(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
+    if (format) |fmt| {
+        const info = buildHelpInfo(allocator);
+        const out = try switch (fmt) {
+            .zon => serde.zon.toSlice(allocator, info),
+            .json => serde.json.toSlice(allocator, info),
+            .yaml => serde.yaml.toSlice(allocator, info),
+        };
+        defer allocator.free(out);
+        std.debug.print("{s}\n", .{out});
+    } else {
+        printHelp();
+    }
+}
+
+fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
+    _ = allocator;
+    return HelpInfo{
+        .name = "m4",
+        .version = VERSION,
+        .description = "Statically typed, AI-native scripting language",
+        .usage = &.{
+            UsageMode{ .mode = "run-file", .syntax = "m4 [flags] <file.m4>" },
+            UsageMode{ .mode = "run-stdin", .syntax = "m4 [flags] -" },
+            UsageMode{ .mode = "repl", .syntax = "m4" },
+        },
+        .subcommands = &.{
+            SubcommandInfo{
+                .name = "help",
+                .description = "Show CLI help (text or structured)",
+                .usage = "m4 help [--zon|--json|--yaml]",
+                .flags = &.{
+                    FlagInfo{ .name = "--zon", .description = "Output help as ZON" },
+                    FlagInfo{ .name = "--json", .description = "Output help as JSON" },
+                    FlagInfo{ .name = "--yaml", .description = "Output help as YAML" },
+                },
+            },
+            SubcommandInfo{
+                .name = "version",
+                .description = "Show version (text or structured)",
+                .usage = "m4 version [--zon|--json|--yaml]",
+                .flags = &.{
+                    FlagInfo{ .name = "--zon", .description = "Output version as ZON" },
+                    FlagInfo{ .name = "--json", .description = "Output version as JSON" },
+                    FlagInfo{ .name = "--yaml", .description = "Output version as YAML" },
+                },
+            },
+            SubcommandInfo{
+                .name = "build",
+                .description = "Compile to native binary",
+                .usage = "m4 build <file.m4> [-o <output>] [-target <arch>]",
+                .flags = &.{
+                    FlagInfo{ .name = "--output", .short = "-o", .description = "Output binary path (default: <file>.out)" },
+                    FlagInfo{ .name = "--target", .short = "-target", .description = "Target architecture (amd64_apple, arm64, rv64, ...)" },
+                },
+            },
+            SubcommandInfo{
+                .name = "explain",
+                .description = "Explain an error code",
+                .usage = "m4 explain <code> [--zon|--json|--yaml]",
+                .flags = &.{
+                    FlagInfo{ .name = "--zon", .description = "Output explanation as ZON" },
+                    FlagInfo{ .name = "--json", .description = "Output explanation as JSON" },
+                    FlagInfo{ .name = "--yaml", .description = "Output explanation as YAML" },
+                },
+            },
+        },
+        .flags = &.{
+            FlagInfo{ .name = "--debug", .short = "-d", .description = "Show bytecode before execution" },
+            FlagInfo{ .name = "--format", .short = "-f", .description = "Format source code and print" },
+            FlagInfo{ .name = "--native", .description = "Emit QBE IR instead of running via bytecode VM" },
+            FlagInfo{ .name = "--check", .description = "Parse and type-check only (no execution)" },
+            FlagInfo{ .name = "--zon", .description = "Structured error output in ZON format" },
+            FlagInfo{ .name = "--json", .description = "Structured error output in JSON format" },
+            FlagInfo{ .name = "--yaml", .description = "Structured error output in YAML format" },
+        },
+    };
+}
+
+fn runVersion(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
+    if (format) |fmt| {
+        const info = VersionInfo{ .name = "m4", .version = VERSION };
+        const out = try switch (fmt) {
+            .zon => serde.zon.toSlice(allocator, info),
+            .json => serde.json.toSlice(allocator, info),
+            .yaml => serde.yaml.toSlice(allocator, info),
+        };
+        defer allocator.free(out);
+        std.debug.print("{s}\n", .{out});
+    } else {
+        printVersion();
+    }
+}
+
 fn runRepl(arena: std.mem.Allocator) !void {
-    std.debug.print("m4 v{s} REPL  (:h for help, :q to quit)\n\n", .{VERSION});
+    std.debug.print("m4 v{s} REPL  (:h help, :q quit)\n\n", .{VERSION});
 
     var line_buf = std.ArrayList(u8).empty;
     defer line_buf.deinit(arena);
@@ -444,8 +597,12 @@ fn printHelp() void {
         \\  m4 [flags] <file.m4>          Run file
         \\  m4 [flags] -                  Run from stdin
         \\  m4                            Launch REPL
-        \\  m4 build <file.m4> [opts]     Compile to native binary
-        \\  m4 explain <code>             Explain an error code
+        \\
+        \\Commands:
+        \\  m4 help [--zon|--json|--yaml]   Show this help
+        \\  m4 version [--zon|--json|--yaml] Show version
+        \\  m4 build <file.m4> [opts]       Compile to native binary
+        \\  m4 explain <code>               Explain an error code
         \\
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
@@ -453,8 +610,6 @@ fn printHelp() void {
         \\  --native                       Emit QBE IR instead of running via bytecode VM
         \\  --check                        Parse and type-check only
         \\  --zon, --json, --yaml           Structured error output format
-        \\  -h, --help                     Show this help
-        \\  -v, --version                  Show version
         \\
         \\Build options:
         \\  -o, --output <path>            Output binary path (default: <file>.out)
