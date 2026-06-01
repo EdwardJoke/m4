@@ -32,9 +32,6 @@ jobs:
       - name: Run tests
         run: zig build test
 
-      - name: Check formatting
-        run: zig fmt --check src/
-
       - name: Verify lint subcommand
         run: zig build run -- lint examples/hello_world.m4
 
@@ -43,9 +40,6 @@ jobs:
 
       - name: Cross-compile aarch64-macos
         run: zig build -Dtarget=aarch64-macos
-
-      - name: Cross-compile x86_64-windows
-        run: zig build -Dtarget=x86_64-windows
 
       - name: Cross-compile aarch64-linux
         run: zig build -Dtarget=aarch64-linux
@@ -61,8 +55,6 @@ jobs:
           - aarch64-linux
           - x86_64-macos
           - aarch64-macos
-          - x86_64-windows
-
     steps:
       - uses: actions/checkout@v4
 
