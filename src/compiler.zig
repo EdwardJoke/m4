@@ -12,6 +12,32 @@ const Local = struct {
     mutable: bool,
 };
 
+const Locals = struct {
+    list: std.ArrayList(Local),
+    map: std.StringHashMap(u8),
+
+    fn init(allocator: std.mem.Allocator) Locals {
+        return .{
+            .list = std.ArrayList(Local).empty,
+            .map = std.StringHashMap(u8).init(allocator),
+        };
+    }
+
+    fn deinit(self: *Locals, allocator: std.mem.Allocator) void {
+        self.list.deinit(allocator);
+        self.map.deinit();
+    }
+
+    fn add(self: *Locals, allocator: std.mem.Allocator, name: []const u8, slot: u8, mutable: bool) !void {
+        try self.list.append(allocator, .{ .name = name, .slot = slot, .mutable = mutable });
+        try self.map.put(name, slot);
+    }
+
+    fn resolve(self: *const Locals, name: []const u8) ?u8 {
+        return self.map.get(name);
+    }
+};
+
 const LoopInfo = struct {
     start_pc: usize,
     exit_patches: std.ArrayList(usize),
@@ -23,7 +49,7 @@ pub const Compiler = struct {
     allocator: std.mem.Allocator,
     chunk: Chunk,
     arena: *ast.NodeArena,
-    locals: std.ArrayList(Local),
+    locals: Locals,
     reg_count: u8,
     loop_stack: std.ArrayList(LoopInfo),
     error_count: u32,
@@ -34,7 +60,7 @@ pub const Compiler = struct {
             .allocator = allocator,
             .chunk = Chunk.init(allocator),
             .arena = arena,
-            .locals = std.ArrayList(Local).empty,
+            .locals = Locals.init(allocator),
             .reg_count = 0,
             .loop_stack = std.ArrayList(LoopInfo).empty,
             .error_count = 0,
@@ -64,10 +90,9 @@ pub const Compiler = struct {
     }
 
     fn allocReg(self: *Compiler) u8 {
-        // Skip past any local slots that overlap
         while (true) {
             var conflict = false;
-            for (self.locals.items) |l| {
+            for (self.locals.list.items) |l| {
                 if (l.slot == self.reg_count) {
                     self.reg_count += 1;
                     conflict = true;
@@ -83,7 +108,7 @@ pub const Compiler = struct {
 
     fn resetTemps(self: *Compiler) void {
         var max_slot: u8 = 0;
-        for (self.locals.items) |l| {
+        for (self.locals.list.items) |l| {
             if (l.slot + 1 > max_slot) max_slot = l.slot + 1;
         }
         self.reg_count = max_slot;
@@ -91,24 +116,19 @@ pub const Compiler = struct {
 
     fn addLocal(self: *Compiler, name: []const u8, mutable: bool) !u8 {
         const slot = self.allocReg();
-        try self.locals.append(self.allocator, .{ .name = name, .slot = slot, .mutable = mutable });
+        try self.locals.add(self.allocator, name, slot, mutable);
         return slot;
     }
 
     fn resolveLocal(self: *Compiler, name: []const u8) ?u8 {
-        var i: usize = self.locals.items.len;
-        while (i > 0) {
-            i -= 1;
-            if (std.mem.eql(u8, self.locals.items[i].name, name)) return self.locals.items[i].slot;
-        }
-        return null;
+        return self.locals.resolve(name);
     }
 
     pub fn compile(self: *Compiler, stmts: []const usize) Error!void {
         var has_main = false;
         for (stmts) |stmt_idx| {
             try self.compileDeclOrStmt(stmt_idx);
-            for (self.locals.items) |l| {
+            for (self.locals.list.items) |l| {
                 if (l.slot + 1 > self.reg_count) self.reg_count = l.slot + 1;
             }
             // Check if this statement defined a pub fun main
@@ -158,13 +178,13 @@ pub const Compiler = struct {
             if (val_reg != slot) {
                 try self.chunk.write(OpCode.encodeABx(.move_op, slot, val_reg), 1);
             }
-            try self.locals.append(self.allocator, .{ .name = ls.name, .slot = slot, .mutable = ls.mutable });
+            try self.locals.add(self.allocator, ls.name, slot, ls.mutable);
             // Free the temp register used by compileExpr
             self.reg_count = val_reg;
         } else {
             const slot = self.allocReg();
             try self.chunk.write(OpCode.encodeAx(.load_nil, slot), 1);
-            try self.locals.append(self.allocator, .{ .name = ls.name, .slot = slot, .mutable = ls.mutable });
+            try self.locals.add(self.allocator, ls.name, slot, ls.mutable);
         }
     }
 
@@ -173,7 +193,7 @@ pub const Compiler = struct {
 
         // Create a sub-compiler state for the function body
         var body_chunk = Chunk.init(self.allocator);
-        var body_locals = std.ArrayList(Local).empty;
+        var body_locals = Locals.init(self.allocator);
         defer body_locals.deinit(self.allocator);
         var body_loops = std.ArrayList(LoopInfo).empty;
         defer {
@@ -186,7 +206,7 @@ pub const Compiler = struct {
         for (fs.params) |p| {
             const s = body_regs;
             body_regs += 1;
-            try body_locals.append(self.allocator, .{ .name = p.name, .slot = s, .mutable = false });
+            try body_locals.add(self.allocator, p.name, s, false);
         }
 
         // Compile function body
@@ -500,7 +520,7 @@ fn compileStmtToChunk(
     allocator: std.mem.Allocator,
     arena: *ast.NodeArena,
     chunk: *Chunk,
-    locals: *std.ArrayList(Local),
+    locals: *Locals,
     loops: *std.ArrayList(LoopInfo),
     reg_count: *u8,
     node_idx: usize,
@@ -516,12 +536,12 @@ fn compileStmtToChunk(
                 if (val_reg != slot) {
                     try chunk.write(OpCode.encodeABx(.move_op, slot, val_reg), 1);
                 }
-                try locals.append(allocator, .{ .name = ls.name, .slot = slot, .mutable = ls.mutable });
+                try locals.add(allocator, ls.name, slot, ls.mutable);
             } else {
                 const slot = reg_count.*;
                 reg_count.* += 1;
                 try chunk.write(OpCode.encodeAx(.load_nil, slot), 1);
-                try locals.append(allocator, .{ .name = ls.name, .slot = slot, .mutable = ls.mutable });
+                try locals.add(allocator, ls.name, slot, ls.mutable);
             }
         },
         .expr_stmt => _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, node.expr_stmt),
@@ -580,7 +600,7 @@ fn compileExprToChunk(
     allocator: std.mem.Allocator,
     arena: *ast.NodeArena,
     chunk: *Chunk,
-    locals: *std.ArrayList(Local),
+    locals: *Locals,
     reg_count: *u8,
     node_idx: usize,
 ) Error!u8 {
@@ -620,16 +640,11 @@ fn compileExprToChunk(
             return r;
         },
         .ident => |name| {
-            // Look up in locals
-            var i: usize = locals.items.len;
-            while (i > 0) {
-                i -= 1;
-                if (std.mem.eql(u8, locals.items[i].name, name)) {
-                    const r = reg_count.*;
-                    reg_count.* += 1;
-                    try chunk.write(OpCode.encodeABx(.load_local, r, locals.items[i].slot), 1);
-                    return r;
-                }
+            if (locals.resolve(name)) |slot| {
+                const r = reg_count.*;
+                reg_count.* += 1;
+                try chunk.write(OpCode.encodeABx(.load_local, r, slot), 1);
+                return r;
             }
             // Global fallback
             const r = reg_count.*;
@@ -687,13 +702,9 @@ fn compileExprToChunk(
             const vr = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, a.value);
             const target = arena.get(a.target);
             if (target == .ident) {
-                var i: usize = locals.items.len;
-                while (i > 0) {
-                    i -= 1;
-                    if (std.mem.eql(u8, locals.items[i].name, target.ident)) {
-                        try chunk.write(OpCode.encodeABx(.store_local, vr, locals.items[i].slot), 1);
-                        return vr;
-                    }
+                if (locals.resolve(target.ident)) |slot| {
+                    try chunk.write(OpCode.encodeABx(.store_local, vr, slot), 1);
+                    return vr;
                 }
                 const ci = try chunk.addConstant(.{ .string = target.ident });
                 try chunk.write(OpCode.encodeABx(.store_global, vr, ci), 1);
@@ -748,7 +759,7 @@ fn compileForToChunk(
     allocator: std.mem.Allocator,
     arena: *ast.NodeArena,
     chunk: *Chunk,
-    locals: *std.ArrayList(Local),
+    locals: *Locals,
     loops: *std.ArrayList(LoopInfo),
     reg_count: *u8,
     node_idx: usize,
@@ -780,7 +791,7 @@ fn compileForToChunk(
 
     try chunk.write(OpCode.encodeABC(.index_get, var_slot, iter_reg, idx_reg), 1);
     // Add loop variable as a local
-    try locals.append(allocator, .{ .name = fs.var_name, .slot = var_slot, .mutable = false });
+    try locals.add(allocator, fs.var_name, var_slot, false);
 
     const lp = LoopInfo{ .start_pc = loop_start, .exit_patches = std.ArrayList(usize).empty };
     const lp_idx = loops.items.len;
@@ -810,7 +821,7 @@ fn compileIfToChunk(
     allocator: std.mem.Allocator,
     arena: *ast.NodeArena,
     chunk: *Chunk,
-    locals: *std.ArrayList(Local),
+    locals: *Locals,
     loops: *std.ArrayList(LoopInfo),
     reg_count: *u8,
     node_idx: usize,
@@ -849,7 +860,7 @@ fn compileLoopToChunk(
     allocator: std.mem.Allocator,
     arena: *ast.NodeArena,
     chunk: *Chunk,
-    locals: *std.ArrayList(Local),
+    locals: *Locals,
     loops: *std.ArrayList(LoopInfo),
     reg_count: *u8,
     node_idx: usize,
