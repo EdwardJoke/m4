@@ -41,9 +41,6 @@ jobs:
       - name: Cross-compile aarch64-macos
         run: zig build -Dtarget=aarch64-macos
 
-      - name: Cross-compile x86_64-windows
-        run: zig build -Dtarget=x86_64-windows
-
       - name: Cross-compile aarch64-linux
         run: zig build -Dtarget=aarch64-linux
 
@@ -58,8 +55,6 @@ jobs:
           - aarch64-linux
           - x86_64-macos
           - aarch64-macos
-          - x86_64-windows
-
     steps:
       - uses: actions/checkout@v4
 
