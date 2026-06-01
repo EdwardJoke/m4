@@ -485,7 +485,7 @@ fn printSubcommandHelp(name: []const u8) void {
             \\
             \\Options:
             \\  -o, --output <path>      Output binary path (default: <file>.out)
-            \\  -target, --target <arch> Target architecture (amd64_apple, arm64, rv64, ...)
+            \\  -target, --target <arch> Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "explain")) {
@@ -576,7 +576,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
                 .usage = "m4 build <file.m4> [-o <output>] [-target <arch>]",
                 .flags = &.{
                     FlagInfo{ .name = "--output", .short = "-o", .description = "Output binary path (default: <file>.out)" },
-                    FlagInfo{ .name = "--target", .short = "-target", .description = "Target architecture (amd64_apple, arm64, rv64, ...)" },
+                    FlagInfo{ .name = "--target", .short = "-target", .description = "Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)" },
                 },
             },
             SubcommandInfo{
@@ -787,7 +787,7 @@ fn printHelp() void {
         \\
         \\Build options:
         \\  -o, --output <path>            Output binary path (default: <file>.out)
-        \\  -target, --target <arch>       Target architecture (amd64_apple, arm64, rv64, ...)
+        \\  -target, --target <arch>       Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
         \\
     , .{VERSION});
 }

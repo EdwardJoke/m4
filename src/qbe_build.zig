@@ -92,11 +92,11 @@ pub fn buildNative(
 
     // ── Step 5: Assemble .s → .o ──────────────────────────────────────
     {
-        const as_args = switch (getHostArch()) {
-            .aarch64 => &[_][]const u8{ "as", "-arch", "arm64", asm_path, "-o", obj_path },
-            .x86_64 => &[_][]const u8{ "as", "-arch", "x86_64", asm_path, "-o", obj_path },
-            else => &[_][]const u8{ "as", asm_path, "-o", obj_path },
+        const as_arch = targetToAsArch(resolved_target) orelse {
+            std.debug.print("m4 build: target '{s}' requires a cross-assembler (e.g. GNU as). Only arm64 and amd64_apple are supported for cross-compilation.\n", .{resolved_target});
+            return error.CrossCompileNotSupported;
         };
+        const as_args = &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
 
         const result = try std.process.run(allocator, io, .{
             .argv = as_args,
@@ -113,8 +113,10 @@ pub fn buildNative(
 
     // ── Step 6: Compile m4rt.c → m4rt.o ────────────────────────────────
     {
+        const cc_target_triple = targetToClangTarget(resolved_target);
         const cc_args = &[_][]const u8{
             "cc", "-c", "-std=c99", "-I.m4_cache",
+            "-target", cc_target_triple,
             ".m4_cache/m4rt.c",
             "-o", rt_obj_path,
         };
@@ -133,8 +135,10 @@ pub fn buildNative(
 
     // ── Step 7: Link .o + m4rt.o → final binary ────────────────────────
     {
+        const ld_target_triple = targetToClangTarget(resolved_target);
         const ld_args = &[_][]const u8{
-            "cc", "-o", output_path,
+            "cc", "-target", ld_target_triple,
+            "-o", output_path,
             obj_path, rt_obj_path,
         };
         const result = try std.process.run(allocator, io, .{
@@ -185,11 +189,31 @@ fn isMacOS() bool {
 /// Get the default QBE target name for the host.
 fn getHostTarget() []const u8 {
     return switch (getHostArch()) {
-        .aarch64 => "arm64",
+        .aarch64 => if (isMacOS()) "arm64_apple" else "arm64",
         .x86_64 => if (isMacOS()) "amd64_apple" else "amd64_sysv",
         .riscv64 => "rv64",
         else => "amd64_sysv",
     };
+}
+
+// ─── Cross-Compilation Target Mapping ──────────────────────────────────────
+
+/// Map QBE target name to Apple assembler -arch flag value.
+/// Returns null for targets that need a cross toolchain.
+fn targetToAsArch(target: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, target, "arm64_apple")) return "arm64";
+    if (std.mem.eql(u8, target, "amd64_apple")) return "x86_64";
+    return null;
+}
+
+/// Map QBE target name to clang -target triple.
+fn targetToClangTarget(target: []const u8) []const u8 {
+    if (std.mem.eql(u8, target, "arm64_apple")) return "arm64-apple-macos";
+    if (std.mem.eql(u8, target, "amd64_apple")) return "x86_64-apple-macos";
+    if (std.mem.eql(u8, target, "arm64")) return "aarch64-linux-gnu";
+    if (std.mem.eql(u8, target, "amd64_sysv")) return "x86_64-linux-gnu";
+    if (std.mem.eql(u8, target, "rv64")) return "riscv64-linux-gnu";
+    return target;
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────
