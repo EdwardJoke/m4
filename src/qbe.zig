@@ -165,9 +165,7 @@ const Emitter = struct {
     }
 
     fn fmt(self: *Emitter, comptime fmt_str: []const u8, args: anytype) !void {
-        const formatted = try std.fmt.allocPrint(self.allocator, fmt_str, args);
-        defer self.allocator.free(formatted);
-        try self.buf.appendSlice(self.allocator, formatted);
+        try self.buf.print(self.allocator, fmt_str, args);
     }
 
     fn comment(self: *Emitter, s: []const u8) !void {
@@ -242,11 +240,11 @@ const Emitter = struct {
         const node = self.arena.get(idx);
         switch (node) {
             .str_lit => |s| {
-                if (!self.strings.contains(s)) {
+                const gop = try self.strings.getOrPut(s);
+                if (!gop.found_existing) {
                     const label = try self.freshStrLabel();
-                    // Store the label in the arena of the string_arena
                     const label_owned = try self.str_arena.allocator().dupe(u8, label);
-                    try self.strings.put(s, label_owned);
+                    gop.value_ptr.* = label_owned;
                 }
             },
             .block => |children| {
@@ -293,25 +291,26 @@ const Emitter = struct {
             },
             .field => |f| {
                 try self.collectStringsFromNode(f.object);
-                if (!self.strings.contains(f.field_name)) {
+                const gop = try self.strings.getOrPut(f.field_name);
+                if (!gop.found_existing) {
                     const label = try self.freshStrLabel();
                     const label_owned = try self.str_arena.allocator().dupe(u8, label);
-                    try self.strings.put(f.field_name, label_owned);
+                    gop.value_ptr.* = label_owned;
                 }
             },
             .struct_lit => |sl| {
-                // Collect type name
-                if (!self.strings.contains(sl.type_name)) {
+                const gop = try self.strings.getOrPut(sl.type_name);
+                if (!gop.found_existing) {
                     const label = try self.freshStrLabel();
                     const label_owned = try self.str_arena.allocator().dupe(u8, label);
-                    try self.strings.put(sl.type_name, label_owned);
+                    gop.value_ptr.* = label_owned;
                 }
-                // Collect field names
                 for (sl.fields) |field| {
-                    if (!self.strings.contains(field.name)) {
+                    const gop_f = try self.strings.getOrPut(field.name);
+                    if (!gop_f.found_existing) {
                         const label = try self.freshStrLabel();
                         const label_owned = try self.str_arena.allocator().dupe(u8, label);
-                        try self.strings.put(field.name, label_owned);
+                        gop_f.value_ptr.* = label_owned;
                     }
                     try self.collectStringsFromNode(field.value);
                 }
@@ -746,11 +745,12 @@ const Emitter = struct {
     }
 
     fn emitStrLit(self: *Emitter, s: []const u8) ![]const u8 {
-        const label = self.strings.get(s) orelse {
+        const gop = try self.strings.getOrPut(s);
+        const label = if (gop.found_existing) gop.value_ptr.* else lbl: {
             // Fallback: should not happen if collectStrings ran
             const lbl = try self.freshStrLabel();
-            try self.strings.put(s, lbl);
-            return lbl;
+            gop.value_ptr.* = lbl;
+            break :lbl lbl;
         };
         const temp = try self.freshTemp();
         try self.fmt("\t{s} =l call $m4_new_string(l {s}, l {d})\n", .{ temp, label, @as(i64, @intCast(s.len)) });
