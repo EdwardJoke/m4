@@ -14,8 +14,9 @@ const VERSION = build_options.version;
 
 const Flags = struct {
     debug_mode: bool = false,
-    check_only: bool = false,
+    lint_mode: bool = false,
     format_mode: bool = false,
+    subcommand_help: ?[]const u8 = null,
     native_mode: bool = false,
     build_mode: bool = false,
     file_path: ?[]const u8 = null,
@@ -49,6 +50,11 @@ pub fn run(init: std.process.Init) !void {
         return;
     }
 
+    if (flags.subcommand_help) |name| {
+        try runSubcommandHelp(arena_alloc, name, flags.output_format);
+        return;
+    }
+
     if (flags.version_mode) {
         try runVersion(arena_alloc, flags.output_format);
         return;
@@ -64,6 +70,15 @@ pub fn run(init: std.process.Init) !void {
             try runBuild(arena_alloc, init.io, path, flags);
         } else {
             std.debug.print("m4 build: missing file path. Usage: m4 build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+        }
+        return;
+    }
+
+    if (flags.lint_mode) {
+        if (flags.file_path) |path| {
+            try runLint(arena_alloc, init.io, path, flags);
+        } else {
+            std.debug.print("m4 lint: missing file path. Usage: m4 lint <file.m4>\n", .{});
         }
         return;
     }
@@ -114,7 +129,9 @@ fn parseFlags(args: []const []const u8) !Flags {
             i += 1;
             while (i < args.len) : (i += 1) {
                 const sub = args[i];
-                if (std.mem.eql(u8, sub, "--zon")) {
+                if (std.mem.eql(u8, sub, "help")) {
+                    flags.subcommand_help = "version";
+                } else if (std.mem.eql(u8, sub, "--zon")) {
                     flags.output_format = .zon;
                 } else if (std.mem.eql(u8, sub, "--json")) {
                     flags.output_format = .json;
@@ -139,8 +156,30 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.debug_mode = true;
             continue;
         }
-        if (std.mem.eql(u8, arg, "--check")) {
-            flags.check_only = true;
+        // 'lint' subcommand — parse and type-check only
+        if (std.mem.eql(u8, arg, "lint")) {
+            flags.lint_mode = true;
+            i += 1;
+            while (i < args.len) : (i += 1) {
+                const sub = args[i];
+                if (std.mem.eql(u8, sub, "help")) {
+                    flags.subcommand_help = "lint";
+                } else if (std.mem.eql(u8, sub, "--zon")) {
+                    flags.error_format = .zon;
+                    flags.output_format = .zon;
+                } else if (std.mem.eql(u8, sub, "--json")) {
+                    flags.error_format = .json;
+                    flags.output_format = .json;
+                } else if (std.mem.eql(u8, sub, "--yaml")) {
+                    flags.error_format = .yaml;
+                    flags.output_format = .yaml;
+                } else if (!std.mem.startsWith(u8, sub, "-")) {
+                    flags.file_path = sub;
+                } else {
+                    std.debug.print("m4: unknown lint flag '{s}'. Try 'm4 lint help' for usage.\n", .{sub});
+                    return error.InvalidFlag;
+                }
+            }
             continue;
         }
         if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
@@ -170,6 +209,10 @@ fn parseFlags(args: []const []const u8) !Flags {
                 return error.InvalidFlag;
             }
             i += 1;
+            if (std.mem.eql(u8, args[i], "help")) {
+                flags.subcommand_help = "explain";
+                continue;
+            }
             flags.explain_code = args[i];
             continue;
         }
@@ -177,6 +220,10 @@ fn parseFlags(args: []const []const u8) !Flags {
         if (std.mem.eql(u8, arg, "build")) {
             flags.build_mode = true;
             i += 1;
+            if (i < args.len and std.mem.eql(u8, args[i], "help")) {
+                flags.subcommand_help = "build";
+                continue;
+            }
             // Parse remaining arguments for the build subcommand
             while (i < args.len) : (i += 1) {
                 const sub = args[i];
@@ -255,28 +302,6 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
         return;
     }
 
-    if (flags.check_only) {
-        var checker = m4.type_check.Checker.init(allocator, &parser.arena);
-        defer checker.deinit();
-        if (flags.error_format != null) checker.diag = &diag_list;
-        checker.check(stmts) catch |err| {
-            std.debug.print("Type check error: {}\n", .{err});
-            return;
-        };
-        if (checker.error_count > 0) {
-            if (flags.error_format) |fmt| {
-                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
-                defer allocator.free(out);
-                std.debug.print("{s}\n", .{out});
-            } else {
-                std.debug.print("{d} type error(s) found.\n", .{checker.error_count});
-            }
-        } else {
-            std.debug.print("Type checking passed.\n", .{});
-        }
-        return;
-    }
-
     if (flags.format_mode) {
         for (stmts) |s| {
             m4.fmt.formatNode(&parser.arena, s, 0);
@@ -350,6 +375,51 @@ fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?m4.err.Fo
     std.debug.print("{s}\n", .{out});
 }
 
+fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Flags) !void {
+    const source = try readFile(allocator, io, path);
+
+    var diag_list = m4.err.DiagnosticList.init();
+    defer diag_list.deinit(allocator);
+
+    var parser = Parser.init(allocator, source);
+    defer parser.deinit();
+    if (flags.error_format != null) {
+        parser.diag = &diag_list;
+    }
+
+    const stmts = parser.parse() catch |err| {
+        if (err == error.ParseError) {
+            if (flags.error_format) |fmt| {
+                const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+                defer allocator.free(out);
+                std.debug.print("{s}\n", .{out});
+            }
+            return;
+        }
+        std.debug.print("Parse error: {}\n", .{err});
+        return;
+    };
+
+    var checker = m4.type_check.Checker.init(allocator, &parser.arena);
+    defer checker.deinit();
+    if (flags.error_format != null) checker.diag = &diag_list;
+    checker.check(stmts) catch |err| {
+        std.debug.print("Type check error: {}\n", .{err});
+        return;
+    };
+    if (checker.error_count > 0) {
+        if (flags.error_format) |fmt| {
+            const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+            defer allocator.free(out);
+            std.debug.print("{s}\n", .{out});
+        } else {
+            std.debug.print("{d} type error(s) found.\n", .{checker.error_count});
+        }
+    } else {
+        std.debug.print("Type checking passed.\n", .{});
+    }
+}
+
 fn runHelp(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
     if (format) |fmt| {
         const info = buildHelpInfo(allocator);
@@ -362,6 +432,99 @@ fn runHelp(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
         std.debug.print("{s}\n", .{out});
     } else {
         printHelp();
+    }
+}
+
+fn runSubcommandHelp(allocator: std.mem.Allocator, name: []const u8, format: ?m4.err.Format) !void {
+    if (format) |fmt| {
+        const info = buildSubcommandHelpInfo(allocator, name);
+        const out = try switch (fmt) {
+            .zon => serde.zon.toSlice(allocator, info),
+            .json => serde.json.toSlice(allocator, info),
+            .yaml => serde.yaml.toSlice(allocator, info),
+        };
+        defer allocator.free(out);
+        std.debug.print("{s}\n", .{out});
+    } else {
+        printSubcommandHelp(name);
+    }
+}
+
+fn buildSubcommandHelpInfo(allocator: std.mem.Allocator, name: []const u8) HelpInfo {
+    var full = buildHelpInfo(allocator);
+    for (full.subcommands, 0..) |sc, idx| {
+        if (std.mem.eql(u8, sc.name, name)) {
+            full.subcommands = full.subcommands[idx .. idx + 1];
+            return full;
+        }
+    }
+    full.subcommands = &.{};
+    return full;
+}
+
+fn printSubcommandHelp(name: []const u8) void {
+    if (std.mem.eql(u8, name, "lint")) {
+        std.debug.print(
+            \\m4 lint — Parse and type-check a source file without executing
+            \\
+            \\Usage:
+            \\  m4 lint <file.m4> [--zon|--json|--yaml]
+            \\  m4 lint help [--zon|--json|--yaml]
+            \\
+            \\Flags:
+            \\  --zon, --json, --yaml  Structured error output format
+            \\
+        , .{});
+    } else if (std.mem.eql(u8, name, "build")) {
+        std.debug.print(
+            \\m4 build — Compile to native binary
+            \\
+            \\Usage:
+            \\  m4 build <file.m4> [-o <output>] [-target <arch>]
+            \\  m4 build help [--zon|--json|--yaml]
+            \\
+            \\Options:
+            \\  -o, --output <path>      Output binary path (default: <file>.out)
+            \\  -target, --target <arch> Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+            \\
+        , .{});
+    } else if (std.mem.eql(u8, name, "explain")) {
+        std.debug.print(
+            \\m4 explain — Explain an error code
+            \\
+            \\Usage:
+            \\  m4 explain <code> [--zon|--json|--yaml]
+            \\  m4 explain help [--zon|--json|--yaml]
+            \\
+            \\Flags:
+            \\  --zon, --json, --yaml  Structured output format
+            \\
+        , .{});
+    } else if (std.mem.eql(u8, name, "version")) {
+        std.debug.print(
+            \\m4 version — Show version information
+            \\
+            \\Usage:
+            \\  m4 version [--zon|--json|--yaml]
+            \\  m4 version help [--zon|--json|--yaml]
+            \\
+            \\Flags:
+            \\  --zon, --json, --yaml  Output format
+            \\
+        , .{});
+    } else if (std.mem.eql(u8, name, "help")) {
+        std.debug.print(
+            \\m4 help — Show CLI help
+            \\
+            \\Usage:
+            \\  m4 help [--zon|--json|--yaml]
+            \\
+            \\Flags:
+            \\  --zon, --json, --yaml  Output format
+            \\
+        , .{});
+    } else {
+        std.debug.print("m4: no help available for '{s}'. Try 'm4 help'.\n", .{name});
     }
 }
 
@@ -398,12 +561,22 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
                 },
             },
             SubcommandInfo{
+                .name = "lint",
+                .description = "Parse and type-check a source file (no execution)",
+                .usage = "m4 lint <file.m4> [--zon|--json|--yaml]",
+                .flags = &.{
+                    FlagInfo{ .name = "--zon", .description = "Structured error output as ZON" },
+                    FlagInfo{ .name = "--json", .description = "Structured error output as JSON" },
+                    FlagInfo{ .name = "--yaml", .description = "Structured error output as YAML" },
+                },
+            },
+            SubcommandInfo{
                 .name = "build",
                 .description = "Compile to native binary",
                 .usage = "m4 build <file.m4> [-o <output>] [-target <arch>]",
                 .flags = &.{
                     FlagInfo{ .name = "--output", .short = "-o", .description = "Output binary path (default: <file>.out)" },
-                    FlagInfo{ .name = "--target", .short = "-target", .description = "Target architecture (amd64_apple, arm64, rv64, ...)" },
+                    FlagInfo{ .name = "--target", .short = "-target", .description = "Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)" },
                 },
             },
             SubcommandInfo{
@@ -421,7 +594,6 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             FlagInfo{ .name = "--debug", .short = "-d", .description = "Show bytecode before execution" },
             FlagInfo{ .name = "--format", .short = "-f", .description = "Format source code and print" },
             FlagInfo{ .name = "--native", .description = "Emit QBE IR instead of running via bytecode VM" },
-            FlagInfo{ .name = "--check", .description = "Parse and type-check only (no execution)" },
             FlagInfo{ .name = "--zon", .description = "Structured error output in ZON format" },
             FlagInfo{ .name = "--json", .description = "Structured error output in JSON format" },
             FlagInfo{ .name = "--yaml", .description = "Structured error output in YAML format" },
@@ -601,19 +773,21 @@ fn printHelp() void {
         \\Commands:
         \\  m4 help [--zon|--json|--yaml]   Show this help
         \\  m4 version [--zon|--json|--yaml] Show version
+        \\  m4 lint <file.m4>               Parse and type-check only
         \\  m4 build <file.m4> [opts]       Compile to native binary
         \\  m4 explain <code>               Explain an error code
+        \\
+        \\Use 'm4 <command> help' for command-specific help (e.g. 'm4 lint help --zon').
         \\
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
         \\  -f, --format                   Format source code and print
         \\  --native                       Emit QBE IR instead of running via bytecode VM
-        \\  --check                        Parse and type-check only
         \\  --zon, --json, --yaml           Structured error output format
         \\
         \\Build options:
         \\  -o, --output <path>            Output binary path (default: <file>.out)
-        \\  -target, --target <arch>       Target architecture (amd64_apple, arm64, rv64, ...)
+        \\  -target, --target <arch>       Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
         \\
     , .{VERSION});
 }
