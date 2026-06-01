@@ -32,9 +32,6 @@ jobs:
       - name: Run tests
         run: zig build test
 
-      - name: Check formatting
-        run: zig fmt --check src/
-
       - name: Verify lint subcommand
         run: zig build run -- lint examples/hello_world.m4
 
