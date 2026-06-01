@@ -452,13 +452,13 @@ fn runSubcommandHelp(allocator: std.mem.Allocator, name: []const u8, format: ?m4
 
 fn buildSubcommandHelpInfo(allocator: std.mem.Allocator, name: []const u8) HelpInfo {
     var full = buildHelpInfo(allocator);
-    // Slice to only the matching subcommand
     for (full.subcommands, 0..) |sc, idx| {
         if (std.mem.eql(u8, sc.name, name)) {
             full.subcommands = full.subcommands[idx .. idx + 1];
-            break;
+            return full;
         }
     }
+    full.subcommands = &.{};
     return full;
 }
 

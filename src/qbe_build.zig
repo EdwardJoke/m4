@@ -92,11 +92,20 @@ pub fn buildNative(
 
     // ── Step 5: Assemble .s → .o ──────────────────────────────────────
     {
-        const as_arch = targetToAsArch(resolved_target) orelse {
-            std.debug.print("m4 build: target '{s}' requires a cross-assembler (e.g. GNU as). Only arm64 and amd64_apple are supported for cross-compilation.\n", .{resolved_target});
-            return error.CrossCompileNotSupported;
-        };
-        const as_args = &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
+        const host_target = getHostTarget();
+        const is_cross = !std.mem.eql(u8, resolved_target, host_target);
+
+        const as_args = if (is_cross) blk: {
+            // Cross-compilation: only macOS↔macOS is supported
+            const as_arch = targetToAsArch(resolved_target) orelse {
+                std.debug.print("m4 build: cross-compilation to '{s}' requires external toolchain.\n", .{resolved_target});
+                return error.CrossCompileNotSupported;
+            };
+            break :blk &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
+        } else if (isMacOS()) blk: {
+            const as_arch = targetToAsArch(resolved_target) orelse "x86_64";
+            break :blk &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
+        } else &[_][]const u8{ "as", asm_path, "-o", obj_path };
 
         const result = try std.process.run(allocator, io, .{
             .argv = as_args,
@@ -113,13 +122,22 @@ pub fn buildNative(
 
     // ── Step 6: Compile m4rt.c → m4rt.o ────────────────────────────────
     {
-        const cc_target_triple = targetToClangTarget(resolved_target);
-        const cc_args = &[_][]const u8{
+        const host_target = getHostTarget();
+        const is_cross = !std.mem.eql(u8, resolved_target, host_target);
+
+        const cc_args = if (is_cross) blk: {
+            break :blk &[_][]const u8{
+                "cc", "-c", "-std=c99", "-I.m4_cache",
+                "-target", targetToClangTarget(resolved_target),
+                ".m4_cache/m4rt.c",
+                "-o", rt_obj_path,
+            };
+        } else &[_][]const u8{
             "cc", "-c", "-std=c99", "-I.m4_cache",
-            "-target", cc_target_triple,
             ".m4_cache/m4rt.c",
             "-o", rt_obj_path,
         };
+
         const result = try std.process.run(allocator, io, .{
             .argv = cc_args,
         });
@@ -135,12 +153,20 @@ pub fn buildNative(
 
     // ── Step 7: Link .o + m4rt.o → final binary ────────────────────────
     {
-        const ld_target_triple = targetToClangTarget(resolved_target);
-        const ld_args = &[_][]const u8{
-            "cc", "-target", ld_target_triple,
-            "-o", output_path,
+        const host_target = getHostTarget();
+        const is_cross = !std.mem.eql(u8, resolved_target, host_target);
+
+        const ld_args = if (is_cross) blk: {
+            break :blk &[_][]const u8{
+                "cc", "-target", targetToClangTarget(resolved_target),
+                "-o", output_path,
+                obj_path, rt_obj_path,
+            };
+        } else &[_][]const u8{
+            "cc", "-o", output_path,
             obj_path, rt_obj_path,
         };
+
         const result = try std.process.run(allocator, io, .{
             .argv = ld_args,
         });
