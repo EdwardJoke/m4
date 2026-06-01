@@ -1,4 +1,4 @@
-# m4 Language Specification (Draft v0.1)
+# m4 Language Specification (Draft v0.2)
 
 ## Overview
 

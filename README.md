@@ -51,24 +51,31 @@ zig build
 ## CLI
 
 ```
-m4 v0.2.0 — statically typed, AI-native scripting language
+m4 v0.2.1 — statically typed, AI-native scripting language
 
 Usage:
-  m4 [flags] <file.m4>   Run file
-  m4 [flags] -              Run from stdin
-  m4                        Launch REPL
+  m4 [flags] <file.m4>          Run file
+  m4 [flags] -                  Run from stdin
+  m4                            Launch REPL
+
+Commands:
+  m4 help [--zon|--json|--yaml]   Show this help
+  m4 version [--zon|--json|--yaml] Show version
+  m4 lint <file.m4>               Parse and type-check only
+  m4 build <file.m4> [opts]       Compile to native binary
+  m4 explain <code>               Explain an error code
+
+Use 'm4 <command> help' for command-specific help (e.g. 'm4 lint help --zon').
 
 Flags:
-  -d, --debug                  Show bytecode before execution
-  --check                      Parse and type-check only
-  -f, --format                 Pretty-print source
-  --error-format=zon|json|yaml Structured error output format
-  --native                     Emit QBE IR instead of running via bytecode VM
-  -h, --help                   Show this help
-  -v, --version                Show version
+  -d, --debug                    Show bytecode before execution
+  -f, --format                   Format source code and print
+  --native                       Emit QBE IR instead of running via bytecode VM
+  --zon, --json, --yaml           Structured error output format
 
-Subcommands:
-  build <file.m4> [opts]       Compile to native binary via QBE
+Build options:
+  -o, --output <path>            Output binary path (default: <file>.out)
+  -target, --target <arch>       Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
 ```
 
 ## Language Overview
@@ -193,7 +200,7 @@ src/
 
 ## Status
 
-m4 is in **early development** (v0.2.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend in development. Expect significant changes and additions.
+m4 is in **early development** (v0.2.1). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

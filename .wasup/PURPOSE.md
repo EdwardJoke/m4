@@ -1,12 +1,12 @@
-# v0.2.1 Purpose
+# v0.2.2 Purpose
 
 ## What
-Fix bugs and improve user experience for both human developers and AI agents working with the m4 language.
+Continue stabilizing the m4 language, standard library, and tooling for both human developers and AI agents.
 
 ## Why
-Polish the existing QBE compiler backend, CLI tooling, and developer ergonomics. A smoother dev experience benefits both humans writing m4 code and AI agents using the tool.
+v0.2.1 completed the `lint` subcommand rename, QBE cross-compilation fixes, and compiler performance optimizations. The next iteration should extend the standard library and language capabilities toward self-hosting readiness.
 
-## Success Criteria
-1. All reported/known bugs are fixed
-2. CLI output is clear, informative, and consistent
-3. AI agents can effectively use the compiler (--help, error messages, exit codes)
+## Success Criteria (TBD)
+- [ ] Standard library additions (string utilities, file I/O)
+- [ ] Language feature refinements for compiler self-hosting
+- [ ] Continued bug fixes and DX improvements

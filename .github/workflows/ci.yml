@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main, indev]
+  pull_request:
+    branches: [main, indev]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Cache Zig global
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/zig
+          key: zig-${{ hashFiles('build.zig.zon') }}
+          restore-keys: |
+            zig-
+
+      - name: Build (native)
+        run: zig build
+
+      - name: Run tests
+        run: zig build test
+
+      - name: Check formatting
+        run: zig fmt --check src/
+
+      - name: Verify lint subcommand
+        run: zig build run -- lint examples/hello_world.m4
+
+      - name: Cross-compile x86_64-macos
+        run: zig build -Dtarget=x86_64-macos
+
+      - name: Cross-compile aarch64-macos
+        run: zig build -Dtarget=aarch64-macos
+
+      - name: Cross-compile x86_64-windows
+        run: zig build -Dtarget=x86_64-windows
+
+      - name: Cross-compile aarch64-linux
+        run: zig build -Dtarget=aarch64-linux
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        target:
+          - x86_64-linux
+          - aarch64-linux
+          - x86_64-macos
+          - aarch64-macos
+          - x86_64-windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Build for ${{ matrix.target }}
+        run: zig build -Dtarget=${{ matrix.target }} -Doptimize=ReleaseFast
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: m4-${{ matrix.target }}
+          path: zig-out/bin/m4*

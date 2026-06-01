@@ -6,7 +6,7 @@
 
 The language uses 15 keywords, no braces, no semicolons — blocks are defined by indentation (like Python). It features result-based error handling (`res[T E]`), generic containers (`vec[T]`, `map[K V]`, `opt[T]`, `res[T E]`), and a register-based virtual machine.
 
-**Status:** Early development (v0.1.2). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend in development (v0.2.0). Significant changes expected.
+**Status:** Early development (v0.2.1). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. Significant changes expected.
 
 ---
 
@@ -97,8 +97,8 @@ zig build run -- hello.m4
 # Run from stdin
 echo 'std.println(42)' | zig build run -- -
 
-# Check only (parse + type-check)
-zig build run -- --check file.m4
+# Lint (parse + type-check only)
+zig build run -- lint file.m4
 
 # Show bytecode
 zig build run -- -d file.m4
@@ -116,7 +116,7 @@ zig build run -- -d file.m4
 - All compiler/VM additions must be tested with Zig's `test` blocks.
 - Run `zig build test` before submitting changes.
 - Ensure all examples in `examples/` still produce correct output.
-- Do not break the `--check` (type-check-only) or `--format` (pretty-print) flags.
+- Do not break the `lint` subcommand (type-check-only) or `--format` (pretty-print) flag.
 
 ### Architecture Principles
 
@@ -140,7 +140,7 @@ zig build run -- -d file.m4
 - Unit tests live inline in each source file using Zig's `test` block syntax.
 - Run all tests: `zig build test`
 - For benchmarking, see `tests/` directory (m4 vs Python vs TypeScript speed comparison).
-- The `--check` flag should always work: `zig build run -- --check file.m4`
+- The `lint` subcommand should always work: `zig build run -- lint file.m4`
 
 ### Error Code Registry
 
@@ -177,7 +177,7 @@ From `SPEC.md`:
 
 ---
 
-## Current State (v0.2.0)
+## Current State (v0.2.1)
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

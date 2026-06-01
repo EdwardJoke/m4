@@ -4,7 +4,7 @@
 
 ---
 
-## Current State (v0.2.0)
+## Current State (v0.2.1)
 
 The m4 compiler lives entirely in Zig across ~4,500 lines of source. The pipeline is:
 
