@@ -6,7 +6,7 @@
 
 The language uses 15 keywords, no braces, no semicolons — blocks are defined by indentation (like Python). It features result-based error handling (`res[T E]`), generic containers (`vec[T]`, `map[K V]`, `opt[T]`, `res[T E]`), and a register-based virtual machine.
 
-**Status:** Early development (v0.2.1). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. Significant changes expected.
+**Status:** Early development (v0.2.2-rc1). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. CLI UX polished — clean error messages without stack traces, `-h`/`--help` support, stdin piping for `lint`. Significant changes expected.
 
 ---
 
@@ -70,6 +70,8 @@ source → Scanner → tokens → Parser → AST → Type Checker → Compiler �
 | `src/stdlib/io.zig`      | `io.println`, `io.print`, `io.readln`, `io.read`, `io.readChar` |
 | `src/stdlib/thread.zig`  | `thread.spawn`, `thread.join`, `thread.channel`, `thread.send`, `thread.recv` |
 | `src/stdlib/range.zig`   | `range.range` — numeric range generator                       |
+| `src/stdlib/fs.zig`      | `fs.read`, `fs.write`, `fs.exists`, `fs.delete`              |
+| `src/stdlib/str.zig`     | `str.len`, `str.slice` — string utilities                    |
 | `src/qbe.zig`            | QBE IR emitter — walks AST and emits QBE SSA IR              |
 | `src/qbe_build.zig`      | QBE native binary build pipeline (compile + link)             |
 | `src/runtime/m4rt.c`     | Minimal C runtime for native-compiled m4 programs            |
@@ -177,7 +179,7 @@ From `SPEC.md`:
 
 ---
 
-## Current State (v0.2.1)
+## Current State (v0.2.2-rc1)
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
@@ -196,12 +198,53 @@ From `SPEC.md`:
 - Structured diagnostics (ZON, JSON, YAML)
 - Error code explainer (`m4 explain r001`)
 - Threading primitives (`thread.spawn`, `thread.join`, channels)
+- File system module (`fs.read`, `fs.write`, `fs.exists`, `fs.delete`)
+- String utilities module (`str.len`, `str.slice`)
 - Benchmarks vs Python/TypeScript
 
 ### Not Yet Implemented
-- Full standard library (`fs`, `net`, `json`, `time`, etc.)
+- Full standard library (`net`, `json`, `time`, etc.)
 - Result type runtime support
-- Modules beyond `std` / `io` / `thread` / `range`
+- Modules beyond `std` / `io` / `thread` / `range` / `fs` / `str`
 - AOT compilation / Cranelift JIT backend
 - Ownership-lite memory model
 - Package manager
+
+---
+
+## Future Roadmap
+
+The long-term goal is a **self-hosting compiler** — write the m4 compiler in m4 itself.
+
+### Phase 0: Language Maturity (v0.2.x–v0.4.x)
+
+- String slicing, escape/unescape helpers
+- Standard library: `std.ord`/`std.chr`, number-to-string, `std.env.args`
+- Data structures: `vec` push/append, `map[K V]` full support, `opt[T]`/`res[T E]` propagation
+- Recursion, stable struct field access, bitwise operations
+
+### Phase 1: m4-in-m4 Prototype (v0.5.x)
+
+Port all five compiler stages to m4:
+scanner → parser → type checker → compiler → VM
+
+### Phase 2: Bootstrap (v0.6.x)
+
+Compile the m4-written compiler with the Zig-hosted compiler → produces `m4c-bootstrap`. Then `m4c-bootstrap` compiles the same source → `m4c-v1`. Bootstrap complete when `m4c-v1 == m4c-v2`.
+
+### Phase 3: Production Self-Hosting (v0.7.x)
+
+Optimize performance, achieve full feature parity, make the m4-written compiler the primary implementation.
+
+### Phase 4: Full Independence (v1.0+)
+
+Drop the Zig VM runtime, self-host the standard library and tooling (formatter, LSP). No Zig code required to build the m4 compiler.
+
+### Key Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Performance: m4-on-Zig-VM too slow | Profile before optimizing; add compiler intrinsics |
+| Bugs in m4 exposed while writing compiler | Fix aggressively; add tests for each bug found |
+| Feature creep makes self-hosting a moving target | Stabilize language spec at v0.5.0; freeze during bootstrap |
+| Bootstrap chicken-and-egg | Implement features in Zig first, then port to m4 |

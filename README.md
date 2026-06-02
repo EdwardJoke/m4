@@ -51,7 +51,7 @@ zig build
 ## CLI
 
 ```
-m4 v0.2.1 — statically typed, AI-native scripting language
+m4 v0.2.2-rc1 — statically typed, AI-native scripting language
 
 Usage:
   m4 [flags] <file.m4>          Run file
@@ -73,9 +73,8 @@ Flags:
   --native                       Emit QBE IR instead of running via bytecode VM
   --zon, --json, --yaml           Structured error output format
 
-Build options:
-  -o, --output <path>            Output binary path (default: <file>.out)
-  -target, --target <arch>       Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+  -o, --output <path>            Output binary path (build only, default: <file>.out)
+  --target <arch>                Target architecture for build (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
 ```
 
 ## Language Overview
@@ -195,12 +194,14 @@ src/
         ├── io.zig       — Standard I/O (print, println, readln, read, readChar)
         ├── std.zig      — Core stdlib (println, print, readln, read, range)
         ├── thread.zig   — Threading primitives (spawn, join, channel, send, recv)
-        └── range.zig    — Numeric range generator
+        ├── range.zig    — Numeric range generator
+        ├── fs.zig       — File system (read, write, exists, delete)
+        └── str.zig      — String utilities (len, slice)
 ```
 
 ## Status
 
-m4 is in **early development** (v0.2.1). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
+m4 is in **early development** (v0.2.2-rc1). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
@@ -214,6 +215,8 @@ m4 is in **early development** (v0.2.1). The core pipeline (scan → parse → t
 - `std.println` / `std.print` / `std.readln` / `std.read` / `std.range`
 - `thread.spawn` / `thread.join` / channels
 - `range.range` — numeric range generator
+- `fs.read` / `fs.write` / `fs.exists` / `fs.delete` — file system
+- `str.len` / `str.slice` — string utilities
 - Struct literals with named fields
 - Vectors (list literals, indexing, iteration)
 - Error propagation with `?`
@@ -225,9 +228,9 @@ m4 is in **early development** (v0.2.1). The core pipeline (scan → parse → t
 - Benchmarks vs Python/TypeScript
 
 ### Not Yet Implemented
-- Full standard library (`fs`, `net`, `json`, `time`, etc.)
+- Full standard library (`net`, `json`, `time`, etc.)
 - Result type runtime support
-- Modules beyond `std` / `io` / `thread` / `range`
+- Modules beyond `std` / `io` / `thread` / `range` / `fs` / `str`
 - Cranelift JIT backend
 - Ownership-lite memory model
 - Package manager
