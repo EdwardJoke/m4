@@ -100,13 +100,23 @@ let val = result?           # error propagation with ?
 
 ### Modules
 ```m4
-use io                     # I/O module
-use std                    # standard library
-use thread                 # threading
+use io                     # I/O: println, print, readln, read, readChar
+use std                    # standard library: println, print, readln, read, range, readChar
+use thread                 # threading: spawn, join, channel, send, recv
+use fs                     # file system: read, write, exists, delete
+use str                    # string utilities: len, slice
 
 io.println("text")         # print with newline
 io.print("no newline")     # print without newline
 std.range(1, 10, 2)        # range: start, end, step
+
+fs.read("file.txt")        # read file as string
+fs.write("file.txt", "hi") # write string to file
+fs.exists("file.txt")      # check if file exists
+fs.delete("file.txt")      # delete file
+
+str.len("hello")           # 5
+str.slice("hello", 0, 2)   # "he"
 ```
 
 ## RE���L / Execute
