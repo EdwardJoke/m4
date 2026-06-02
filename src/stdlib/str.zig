@@ -71,10 +71,12 @@ test "str.slice" {
 
     // normal slice
     const r = strSlice(&vm, &.{ .{ .string = "hello" }, .{ .int = 0 }, .{ .int = 2 } });
+    defer if (r == .string) vm.allocator.free(r.string);
     try zig_std.testing.expectEqualStrings("he", r.string);
 
     // full string
     const r2 = strSlice(&vm, &.{ .{ .string = "world" }, .{ .int = 0 }, .{ .int = 5 } });
+    defer if (r2 == .string) vm.allocator.free(r2.string);
     try zig_std.testing.expectEqualStrings("world", r2.string);
 
     // middle slice

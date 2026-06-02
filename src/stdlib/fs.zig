@@ -1,6 +1,5 @@
 const zig_std = @import("std");
 const c = @cImport({
-    @cDefine("_GNU_SOURCE", {});
     @cInclude("stdio.h");
     @cInclude("stdlib.h");
     @cInclude("sys/stat.h");
@@ -27,9 +26,10 @@ fn fsRead(vm: *VM, args: []const value.Value) value.Value {
     const file = c.fopen(path_z, "rb");
     if (file == null) return .nil;
     defer _ = c.fclose(file);
-    _ = c.fseek(file, 0, c.SEEK_END);
+    if (c.fseek(file, 0, c.SEEK_END) != 0) return .nil;
     const size = c.ftell(file);
-    _ = c.fseek(file, 0, c.SEEK_SET);
+    if (size < 0) return .nil;
+    if (c.fseek(file, 0, c.SEEK_SET) != 0) return .nil;
     const buf = vm.allocator.alloc(u8, @intCast(size)) catch return .nil;
     const n = c.fread(buf.ptr, 1, buf.len, file);
     if (n != buf.len) {
@@ -99,6 +99,7 @@ test "fs.write + fs.read + fs.exists + fs.delete" {
 
     // read
     const r = fsRead(&vm, &.{.{ .string = test_path }});
+    defer if (r == .string) vm.allocator.free(r.string);
     try zig_std.testing.expectEqualStrings("hello fs!", r.string);
 
     // delete
