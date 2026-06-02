@@ -240,5 +240,8 @@ MIT
 
 This project is built on open-source projects:
 
-Thanks c9x's QBE compiler backend. [License](qbe/LICENSE)
-Thanks Zig programming language.
+Thanks [QBE](https://c9x.me/compile/) compiler backend.
+
+Thanks [Zig](https://ziglang.org/).
+
+Thanks [serde.zig](https://github.com/OrlovEvgeny/serde.zig).
