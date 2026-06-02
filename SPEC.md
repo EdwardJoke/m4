@@ -1,4 +1,4 @@
-# m4 Language Specification (Draft v0.2)
+# m4 Language Specification (Draft v0.2.2)
 
 ## Overview
 
@@ -419,6 +419,7 @@ The standard library should remain:
 ```text
 io
 fs
+str
 net
 json
 time
@@ -431,7 +432,7 @@ env
 
 # Features Explicitly Excluded
 
-The following are intentionally excluded from v0.1:
+The following are intentionally excluded from v0.2:
 
 * classes
 * inheritance
