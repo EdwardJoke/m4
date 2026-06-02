@@ -82,3 +82,67 @@ fn fsDelete(vm: *VM, args: []const value.Value) value.Value {
     const rc = c.remove(path_z);
     return .{ .bool = rc == 0 };
 }
+
+test "fs.write + fs.read + fs.exists + fs.delete" {
+    var vm = VM.init(zig_std.testing.allocator);
+    defer vm.deinit();
+
+    const test_path = ".wasup/_fs_test_tmp.txt";
+
+    // write
+    const w = fsWrite(&vm, &.{ .{ .string = test_path }, .{ .string = "hello fs!" } });
+    try zig_std.testing.expect(w.bool);
+
+    // exists
+    const e = fsExists(&vm, &.{.{ .string = test_path }});
+    try zig_std.testing.expect(e.bool);
+
+    // read
+    const r = fsRead(&vm, &.{.{ .string = test_path }});
+    try zig_std.testing.expectEqualStrings("hello fs!", r.string);
+
+    // delete
+    const d = fsDelete(&vm, &.{.{ .string = test_path }});
+    try zig_std.testing.expect(d.bool);
+
+    // exists after delete → false
+    const e2 = fsExists(&vm, &.{.{ .string = test_path }});
+    try zig_std.testing.expect(!e2.bool);
+}
+
+test "fs.read nonexistent" {
+    var vm = VM.init(zig_std.testing.allocator);
+    defer vm.deinit();
+
+    const r = fsRead(&vm, &.{.{ .string = "/nonexistent/path/xyz123_nope" }});
+    try zig_std.testing.expect(r == .nil);
+}
+
+test "fs.write with bad args" {
+    var vm = VM.init(zig_std.testing.allocator);
+    defer vm.deinit();
+
+    // no args → false
+    const w = fsWrite(&vm, &.{});
+    try zig_std.testing.expect(!w.bool);
+
+    // only path → false
+    const w2 = fsWrite(&vm, &.{.{ .string = "/tmp/x" }});
+    try zig_std.testing.expect(!w2.bool);
+}
+
+test "fs.exists nonexistent" {
+    var vm = VM.init(zig_std.testing.allocator);
+    defer vm.deinit();
+
+    const e = fsExists(&vm, &.{.{ .string = "/nonexistent/path/xyz123_nope" }});
+    try zig_std.testing.expect(!e.bool);
+}
+
+test "fs.delete nonexistent" {
+    var vm = VM.init(zig_std.testing.allocator);
+    defer vm.deinit();
+
+    const d = fsDelete(&vm, &.{.{ .string = "/nonexistent/path/xyz123_nope" }});
+    try zig_std.testing.expect(!d.bool);
+}
