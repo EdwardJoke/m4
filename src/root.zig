@@ -15,6 +15,7 @@ pub const stdlib = struct {
     pub const thread = @import("stdlib/thread.zig");
     pub const range = @import("stdlib/range.zig");
     pub const std = @import("stdlib/std.zig");
+    pub const fs = @import("stdlib/fs.zig");
 };
 pub const fmt = @import("fmt.zig");
 pub const qbe = @import("qbe.zig");

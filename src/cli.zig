@@ -370,6 +370,8 @@ fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
                 try m4.stdlib.thread.register(vm);
             } else if (std.mem.eql(u8, path, "range")) {
                 try m4.stdlib.range.register(vm);
+            } else if (std.mem.eql(u8, path, "fs")) {
+                try m4.stdlib.fs.register(vm);
             }
         }
     }
