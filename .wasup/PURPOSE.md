@@ -1,12 +1,14 @@
-# v0.2.2 Purpose
+# v0.2.2-rc1 Purpose
 
 ## What
-Continue stabilizing the m4 language, standard library, and tooling for both human developers and AI agents.
+Bug fixes, documentation updates, and targeted standard library improvements to stabilize the m4 language before the next development cycle.
 
 ## Why
-v0.2.1 completed the `lint` subcommand rename, QBE cross-compilation fixes, and compiler performance optimizations. The next iteration should extend the standard library and language capabilities toward self-hosting readiness.
+v0.2.1 shipped the `lint` subcommand rename, QBE cross-compilation fixes, and compiler performance optimizations. v0.2.2-rc1 addresses remaining rough edges — documentation staleness, known bugs, and small stdlib gaps — to stabilize the platform.
 
-## Success Criteria (TBD)
-- [ ] Standard library additions (string utilities, file I/O)
-- [ ] Language feature refinements for compiler self-hosting
-- [ ] Continued bug fixes and DX improvements
+## Success Criteria
+- [ ] CI pipeline verified and Windows deferral documented
+- [ ] AGENTS.md status updated to v0.2.2
+- [ ] ROADMAP.md removed (info absorbed into AGENTS.md/SPEC.md)
+- [ ] Std lib gains at least one new function (e.g. `std.to_string`, string utilities)
+- [ ] Tests pass, no regressions

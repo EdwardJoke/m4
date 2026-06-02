@@ -116,6 +116,8 @@ pub const ERROR_DB = [_]ErrorInfo{
     .{ .code = "r009", .title = "Not Indexable", .description = "An index operation was applied to a value that is not a vector or string." },
     .{ .code = "r010", .title = "Nil Propagation", .description = "A nil value was unwrapped with the `!` (try) operator. Nil values must be handled before unwrapping." },
     .{ .code = "r011", .title = "Unknown Opcode", .description = "The VM encountered an unrecognized bytecode instruction. This indicates either a compiler bug or corrupted bytecode." },
+    .{ .code = "r012", .title = "Division by Zero", .description = "A division operation had zero as the divisor. Division by zero is undefined." },
+    .{ .code = "r013", .title = "Modulo by Zero", .description = "A modulo operation had zero as the divisor. Modulo by zero is undefined." },
 };
 
 pub fn explainError(allocator: std.mem.Allocator, code: []const u8, format: ?Format) ![]const u8 {
