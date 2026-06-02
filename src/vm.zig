@@ -228,6 +228,7 @@ pub fn run(self: *VM) !void {
                 const a = self.registers[base + d.b];
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
+                    if (b.int == 0) return self.runtimeError("r012", "division by zero", .{});
                     self.registers[base + d.a] = .{ .int = @divTrunc(a.int, b.int) };
                 } else {
                     self.registers[base + d.a] = binaryOp(.div_op, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in / operation", .{});
@@ -239,6 +240,7 @@ pub fn run(self: *VM) !void {
                 const a = self.registers[base + d.b];
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
+                    if (b.int == 0) return self.runtimeError("r013", "modulo by zero", .{});
                     self.registers[base + d.a] = .{ .int = @mod(a.int, b.int) };
                 } else {
                     return self.runtimeError("r003", "modulo requires integer operands", .{});

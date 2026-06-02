@@ -152,6 +152,10 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.file_path = "-";
             continue;
         }
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            flags.help_mode = true;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--debug") or std.mem.eql(u8, arg, "-d")) {
             flags.debug_mode = true;
             continue;
@@ -173,6 +177,8 @@ fn parseFlags(args: []const []const u8) !Flags {
                 } else if (std.mem.eql(u8, sub, "--yaml")) {
                     flags.error_format = .yaml;
                     flags.output_format = .yaml;
+                } else if (std.mem.eql(u8, sub, "-")) {
+                    flags.file_path = "-";
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
                     flags.file_path = sub;
                 } else {
@@ -376,7 +382,10 @@ fn runExplain(allocator: std.mem.Allocator, code: []const u8, format: ?m4.err.Fo
 }
 
 fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Flags) !void {
-    const source = try readFile(allocator, io, path);
+    const source = if (std.mem.eql(u8, path, "-"))
+        try readStdin(allocator, io)
+    else
+        try readFile(allocator, io, path);
 
     var diag_list = m4.err.DiagnosticList.init();
     defer diag_list.deinit(allocator);
