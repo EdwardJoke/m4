@@ -1,14 +1,12 @@
-# v0.2.2-rc1 Purpose
+# v0.2.2 Purpose
 
 ## What
-Bug fixes, documentation updates, and targeted standard library improvements to stabilize the m4 language before the next development cycle.
+Ship v0.2.2 stable from rc1 with comprehensive speed tests, performance benchmarking, compute usage profiling, and stabilization fixes.
 
 ## Why
-v0.2.1 shipped the `lint` subcommand rename, QBE cross-compilation fixes, and compiler performance optimizations. v0.2.2-rc1 addresses remaining rough edges — documentation staleness, known bugs, and small stdlib gaps — to stabilize the platform.
+v0.2.2-rc1 shipped new stdlib modules (fs, str), CLI UX improvements (lint subcommand, -h flag), and QBE cross-compilation fixes. This stable release validates that m4 delivers on its performance promise — at least 10x faster than Python on the hardspeed benchmark — profiles CPU/memory usage, and fixes any remaining rc1 issues.
 
 ## Success Criteria
-- [ ] CI pipeline verified and Windows deferral documented
-- [ ] AGENTS.md status updated to v0.2.2
-- [ ] ROADMAP.md removed (info absorbed into AGENTS.md/SPEC.md)
-- [ ] Std lib gains at least one new function (e.g. `std.to_string`, string utilities)
-- [ ] Tests pass, no regressions
+- [ ] m4 is 10x faster than Python on the hardspeed Fibonacci benchmark
+- [ ] All existing unit tests pass, no regressions
+- [ ] Compute usage (execution time + memory) profiled and documented

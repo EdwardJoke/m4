@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .serde = .{
-            .url = "git+https://github.com/OrlovEvgeny/serde.zig#6ce3999a77a62dd779d4701ff4cd5714ff7a28bf",
-            .hash = "serde-1.0.1-1DszT153DAAj09Cj1NSTPQFV2E3ZxcFXN41Wn2g4Q_pV",
+            .url = "git+https://github.com/OrlovEvgeny/serde.zig#875e1b680b02bfbc2f146ea3d3f91d724f86c500",
+            .hash = "serde-1.0.1-1DszT_hrDQAURHcyOhR7wEKwqbF8FYl8vN26pKLLCkWn",
         },
     },
     .paths = .{
