@@ -32,8 +32,8 @@ fi
 
 # Format: name:m4_file:py_file:ts_file:description
 BENCHMARKS=(
-    "hardspeed:tests/hardspeed.m4:tests/hardspeed.py:tests/hardspeed.ts:Recursive Fibonacci (fib 0-30)"
-    "hardspeed_concat:tests/hardspeed_concat.m4:tests/hardspeed_concat.py:tests/hardspeed_concat.ts:String concatenation (500/2000/5000 iterations)"
+    "hardspeed:tests/bench/hardspeed.m4:tests/bench/hardspeed.py:tests/bench/hardspeed.ts:Recursive Fibonacci (fib 0-30)"
+    "hardspeed_concat:tests/bench/hardspeed_concat.m4:tests/bench/hardspeed_concat.py:tests/bench/hardspeed_concat.ts:String concatenation (500/2000/5000 iterations)"
 )
 
 # ── Helpers ────────────────────────────────────────────────────────────
