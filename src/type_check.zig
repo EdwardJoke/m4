@@ -194,16 +194,21 @@ pub const Checker = struct {
             declared_type = try self.resolveTypeExpr(ta);
         }
 
+        var final_type = declared_type orelse self.allocType(.{ .primitive = .i32 });
         if (ls.value) |val_idx| {
             const val_type = try self.checkExprInEnv(env, val_idx);
             if (declared_type) |dt| {
+                // Check if value type is compatible with declared type
                 if (!isCompatible(val_type, dt)) {
                     self.typeError("Type mismatch in variable declaration");
                 }
+                // Use declared type as final type
+                final_type = dt;
+            } else {
+                // No declared type, infer from value
+                final_type = val_type;
             }
         }
-
-        const final_type = declared_type orelse self.allocType(.{ .primitive = .i32 });
         try env.define(ls.name, final_type, ls.mutable);
     }
 
@@ -440,9 +445,8 @@ fn isComparable(a: *const Type.Type, b: *const Type.Type) bool {
 fn isCompatible(a: *const Type.Type, b: *const Type.Type) bool {
     if (a.eql(b)) return true;
     if (b.* == .void_type) return true;
-    if (isNumeric(a) and isNumeric(b)) {
-        return numericSize(a.primitive) <= numericSize(b.primitive);
-    }
+    // Allow any numeric-to-numeric assignment (compiler handles conversion)
+    if (isNumeric(a) and isNumeric(b)) return true;
     return false;
 }
 
