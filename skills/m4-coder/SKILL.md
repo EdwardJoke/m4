@@ -1,11 +1,11 @@
 ---
 name: m4-coder
-description: Write correct m4 language code — statically typed, indentation-sensitive, 15-keyword scripting language
+description: Write correct m4 language code — statically typed, indentation-sensitive, 15-keyword scripting language. The trigger is 'm4', 'm4 lang', 'm4 code'.
 ---
 
 # m4 Coder
 
-Write syntactically correct, idiomatic m4 code. Reference `SPEC.md` for the full language specification.
+Write syntactically correct, idiomatic m4 code. Reference `/reference/SPEC.md` for the full language specification.
 
 ## Critical Rules
 

@@ -12,6 +12,8 @@ const NativeFn = *const fn (*VM, []const Value.Value) Value.Value;
 
 const CallFrame = struct {
     chunk: *const Chunk,
+    code: []const u32,
+    constants: []const Value.Value,
     pc: usize,
     base_reg: u8,
     ret_pc: usize,
@@ -58,8 +60,7 @@ pub fn registerNative(self: *VM, name: []const u8, ptr: *anyopaque) !void {
 pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     self.chunk = chunk;
     self.pc = 0;
-    self.frame_count = 1;
-    self.frames[0] = .{ .chunk = chunk, .pc = 0, .base_reg = 0, .ret_pc = 0, .ret_dst = 0 };
+    self.frame_count = 1;        self.frames[0] = .{ .chunk = chunk, .code = chunk.code.items, .constants = chunk.constants.items, .pc = 0, .base_reg = 0, .ret_pc = 0, .ret_dst = 0 };
     return self.run();
 }
 
@@ -77,7 +78,7 @@ fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: any
     return error.RuntimeError;
 }
 
-fn cacheGetGlobal(self: *VM, name: []const u8) ?Value.Value {
+inline fn cacheGetGlobal(self: *VM, name: []const u8) ?Value.Value {
     for (&self.global_cache) |*entry| {
         if (entry.name.ptr == name.ptr and entry.name.len == name.len) {
             return entry.value;
@@ -122,9 +123,9 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
 }
 
 pub fn run(self: *VM) !void {
-    var code: []const u32 = self.chunk.?.code.items;
-    var constants: []const Value.Value = self.chunk.?.constants.items;
     var frame: *CallFrame = &self.frames[0];
+    var code: []const u32 = frame.code;
+    var constants: []const Value.Value = frame.constants;
     var pc: usize = self.pc;
 
     while (true) {
@@ -165,7 +166,7 @@ pub fn run(self: *VM) !void {
             },
             .load_local => {
                 const dec = OpCode.decodeABx(inst);
-                self.registers[base + dec.a] = self.registers[frame.base_reg + dec.bx];
+                self.registers[base + dec.a] = self.registers[base + dec.bx];
                 pc += 1;
             },
             .store_global => {
@@ -183,7 +184,7 @@ pub fn run(self: *VM) !void {
             },
             .store_local => {
                 const dec = OpCode.decodeABx(inst);
-                self.registers[frame.base_reg + dec.bx] = self.registers[base + dec.a];
+                self.registers[base + dec.bx] = self.registers[base + dec.a];
                 pc += 1;
             },
 
@@ -378,19 +379,31 @@ pub fn run(self: *VM) !void {
                     if (self.frame_count >= FRAMES_MAX) return self.runtimeError("r006", "stack overflow: too many nested calls", .{});
                     frame.pc = pc + 1;
                     const new_base = base + dec.b + 1 + dec.c;
+                    const arg_count = dec.c;
                     self.frame_count += 1;
                     frame = &self.frames[self.frame_count - 1];
                     frame.chunk = &fun.chunk;
+                    frame.code = fun.chunk.code.items;
+                    frame.constants = fun.chunk.constants.items;
                     frame.pc = 0;
                     frame.base_reg = new_base;
                     frame.ret_pc = 0;
                     frame.ret_dst = base + dec.a;
-                    // Copy args
-                    for (0..dec.c) |i| {
-                        self.registers[new_base + i] = self.registers[base + dec.b + 1 + i];
+                    // Copy args — unrolled for small arg counts (hot path for Fibonacci)
+                    const arg_base = base + dec.b + 1;
+                    switch (arg_count) {
+                        0 => {},
+                        1 => self.registers[new_base] = self.registers[arg_base],
+                        2 => {
+                            self.registers[new_base] = self.registers[arg_base];
+                            self.registers[new_base + 1] = self.registers[arg_base + 1];
+                        },
+                        else => for (0..arg_count) |i| {
+                            self.registers[new_base + i] = self.registers[arg_base + i];
+                        },
                     }
-                    code = frame.chunk.code.items;
-                    constants = frame.chunk.constants.items;
+                    code = frame.code;
+                    constants = frame.constants;
                     pc = 0;
                 } else if (callee == .@"fn") {
                     const native: NativeFn = @ptrCast(@alignCast(callee.@"fn"));
@@ -416,8 +429,8 @@ pub fn run(self: *VM) !void {
                     const ret_dst = frame.ret_dst;
                     self.frame_count -= 1;
                     frame = &self.frames[self.frame_count - 1];
-                    code = frame.chunk.code.items;
-                    constants = frame.chunk.constants.items;
+                    code = frame.code;
+                    constants = frame.constants;
                     pc = frame.pc;
                     self.registers[ret_dst] = ret_val;
                 } else {

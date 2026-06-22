@@ -6,7 +6,7 @@
 
 The language uses 15 keywords, no braces, no semicolons — blocks are defined by indentation (like Python). It features result-based error handling (`res[T E]`), generic containers (`vec[T]`, `map[K V]`, `opt[T]`, `res[T E]`), and a register-based virtual machine.
 
-**Status:** Early development (v0.2.2-rc1). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. CLI UX polished — clean error messages without stack traces, `-h`/`--help` support, stdin piping for `lint`. Significant changes expected.
+**Status:** Early development (v0.2.2). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. CLI UX polished — clean error messages without stack traces, `-h`/`--help` support, stdin piping for `lint`. Significant changes expected.
 
 ---
 
@@ -179,7 +179,7 @@ From `SPEC.md`:
 
 ---
 
-## Current State (v0.2.2-rc1)
+## Current State (v0.2.2)
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

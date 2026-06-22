@@ -1,1 +1,0 @@
-python3 tests/hardspeed.py

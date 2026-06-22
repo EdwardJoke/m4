@@ -143,17 +143,53 @@ pub const Checker = struct {
     }
 
     pub fn check(self: *Checker, stmts: []const usize) (error{OutOfMemory})!void {
-        // Pass 1: collect type declarations
+        // Pass 1: collect type declarations and register native functions
         for (stmts) |stmt_idx| {
             const node = self.arena.get(stmt_idx);
             if (node == .type_decl) {
                 try self.checkTypeDecl(stmt_idx);
+            } else if (node == .use_stmt) {
+                try self.registerNativeFunctions(node.use_stmt.path);
             }
         }
 
         // Pass 2: check all statements
         for (stmts) |stmt_idx| {
             try self.checkStmtInEnv(&self.root_env, stmt_idx);
+        }
+    }
+
+    fn registerNativeFunctions(self: *Checker, module: []const u8) !void {
+        // Register native function types for known modules
+        if (std.mem.eql(u8, module, "std")) {
+            try self.root_env.define("std.println", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.print", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.readln", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("std.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("std.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
+            try self.root_env.define("std.range", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
+        } else if (std.mem.eql(u8, module, "io")) {
+            try self.root_env.define("io.println", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("io.print", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("io.readln", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("io.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("io.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
+        } else if (std.mem.eql(u8, module, "fs")) {
+            try self.root_env.define("fs.read", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("fs.write", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }, .{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.exists", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.delete", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
+        } else if (std.mem.eql(u8, module, "str")) {
+            try self.root_env.define("str.len", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .i32 })) } }), false);
+            try self.root_env.define("str.slice", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }, .{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+        } else if (std.mem.eql(u8, module, "thread")) {
+            try self.root_env.define("thread.spawn", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.join", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.channel", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.send", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.recv", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+        } else if (std.mem.eql(u8, module, "range")) {
+            try self.root_env.define("range.range", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
         }
     }
 
@@ -194,16 +230,21 @@ pub const Checker = struct {
             declared_type = try self.resolveTypeExpr(ta);
         }
 
+        var final_type = declared_type orelse self.allocType(.{ .primitive = .i32 });
         if (ls.value) |val_idx| {
             const val_type = try self.checkExprInEnv(env, val_idx);
             if (declared_type) |dt| {
+                // Check if value type is compatible with declared type
                 if (!isCompatible(val_type, dt)) {
                     self.typeError("Type mismatch in variable declaration");
                 }
+                // Use declared type as final type
+                final_type = dt;
+            } else {
+                // No declared type, infer from value
+                final_type = val_type;
             }
         }
-
-        const final_type = declared_type orelse self.allocType(.{ .primitive = .i32 });
         try env.define(ls.name, final_type, ls.mutable);
     }
 
@@ -268,13 +309,13 @@ pub const Checker = struct {
     fn checkIfInEnv(self: *Checker, env: *TypeEnv, node_idx: usize) (error{OutOfMemory})!void {
         const ifs = self.arena.get(node_idx).if_stmt;
 
-        const cond_type = try self.checkExprInEnv(env, ifs.cond);
-        if (!isBoolish(cond_type)) self.typeError("if condition must be boolean");
+        // Allow any value as if condition (truthy/falsy coercion at runtime)
+        _ = try self.checkExprInEnv(env, ifs.cond);
 
         try self.checkStmtInEnv(env, ifs.then_branch);
         for (ifs.elifs) |elif| {
-            const ec = try self.checkExprInEnv(env, elif.cond);
-            if (!isBoolish(ec)) self.typeError("elif condition must be boolean");
+            // Allow any value as elif condition
+            _ = try self.checkExprInEnv(env, elif.cond);
             try self.checkStmtInEnv(env, elif.body);
         }
         if (ifs.else_branch) |else_idx| {
@@ -319,10 +360,24 @@ pub const Checker = struct {
                 self.typeError("Undefined variable");
                 return self.allocType(.{ .primitive = .i32 });
             },
+            .field => |f| {
+                // Try module.function lookup (e.g., fs.write)
+                const obj_node = self.arena.get(f.object);
+                if (obj_node == .ident) {
+                    const full_name = try std.fmt.allocPrint(self.type_arena.allocator(), "{s}.{s}", .{ obj_node.ident, f.field_name });
+                    if (env.lookup(full_name)) |s| return s.typ;
+                }
+                // Fallback: field access on a value (struct field) — return i32 for now
+                return self.allocType(.{ .primitive = .i32 });
+            },
             .binary => |b| self.checkBinaryInEnv(env, b),
             .unary => |u| self.checkUnaryInEnv(env, u),
             .call => |c| self.checkCallInEnv(env, c),
             .vec_lit => |items| self.checkVecLitInEnv(env, items),
+            .struct_lit => |sl| {
+                if (self.type_defs.get(sl.type_name)) |t| return t;
+                return self.allocType(.{ .primitive = .i32 });
+            },
             .assign => |a| self.checkAssignInEnv(env, a),
             else => self.allocType(.{ .primitive = .i32 }),
         };
@@ -373,9 +428,13 @@ pub const Checker = struct {
     }
 
     fn checkCallInEnv(self: *Checker, env: *TypeEnv, c: anytype) (error{OutOfMemory})!*const Type.Type {
-        _ = try self.checkExprInEnv(env, c.callee);
+        const callee_type = try self.checkExprInEnv(env, c.callee);
         for (c.args) |arg_idx| {
             _ = try self.checkExprInEnv(env, arg_idx);
+        }
+        // Return the function's return type
+        if (callee_type.* == .func) {
+            return callee_type.func.ret;
         }
         return self.allocType(.void_type);
     }
@@ -440,9 +499,8 @@ fn isComparable(a: *const Type.Type, b: *const Type.Type) bool {
 fn isCompatible(a: *const Type.Type, b: *const Type.Type) bool {
     if (a.eql(b)) return true;
     if (b.* == .void_type) return true;
-    if (isNumeric(a) and isNumeric(b)) {
-        return numericSize(a.primitive) <= numericSize(b.primitive);
-    }
+    // Allow any numeric-to-numeric assignment (compiler handles conversion)
+    if (isNumeric(a) and isNumeric(b)) return true;
     return false;
 }
 

@@ -1,1 +1,0 @@
-zig-out/bin/m4 tests/hardspeed.m4

@@ -1,6 +1,6 @@
 [repo]
 name = "m4"
-current_version = "v0.2.2-rc1"
+current_version = "v0.2.2"
 next_version = "v0.3.0"
 
 [repo.branches]

@@ -1,0 +1,1 @@
+python3 tests/bench/hardspeed.py

@@ -91,6 +91,8 @@ fn threadEntry(info: *SpawnInfo) void {
     child_vm.frame_count = 1;
     child_vm.frames[0] = .{
         .chunk = &fun.chunk,
+        .code = fun.chunk.code.items,
+        .constants = fun.chunk.constants.items,
         .pc = 0,
         .base_reg = 0,
         .ret_pc = 0,
