@@ -1,1 +1,1 @@
-python3 tests/hardspeed.py
+python3 tests/bench/hardspeed.py

@@ -1,1 +1,1 @@
-bun run tests/hardspeed.ts
+bun run tests/bench/hardspeed.ts

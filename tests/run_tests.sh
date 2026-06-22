@@ -104,6 +104,7 @@ declare -a TESTS=(
     "test_errors:--- All error handling tests passed ---:Error patterns, nil, safe indexing"
     "test_str_module:--- All str module tests passed ---:str.len, str.slice"
     "test_fs_module:--- All fs module tests passed ---:fs.read, fs.write, fs.exists, fs.delete"
+    "test_thread_module:--- All thread module tests passed ---:thread.spawn, thread.join, thread.channel"
     "string_test::String operations with std.readln (stdin piped)"
     "string_ops:done:String comparison operations"
 )
