@@ -9,9 +9,11 @@ fun fib(n i32) i32
     else
         ret fib(n - 1) + fib(n - 2)
 
-pub fun main()
+pub fun main() i32
     std.println("First 20 Fibonacci numbers:")
 
     for n in std.range(0, 20)
         let result i32 = fib(n)
         std.println(result)
+
+    ret 0
