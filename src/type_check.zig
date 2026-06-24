@@ -168,12 +168,6 @@ pub const Checker = struct {
             try self.root_env.define("std.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("std.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
             try self.root_env.define("std.range", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
-        } else if (std.mem.eql(u8, module, "io")) {
-            try self.root_env.define("io.println", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("io.print", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("io.readln", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("io.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("io.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
         } else if (std.mem.eql(u8, module, "fs")) {
             try self.root_env.define("fs.read", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("fs.write", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }, .{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);

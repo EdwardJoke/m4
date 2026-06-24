@@ -89,8 +89,6 @@ int64_t m4_is_truthy(int64_t val);
 int64_t m4_std_println(int64_t val);
 int64_t m4_std_print(int64_t val);
 int64_t m4_std_range(int64_t start, int64_t end);
-int64_t m4_io_println(int64_t val);
-int64_t m4_io_print(int64_t val);
 
 #ifdef __cplusplus
 }

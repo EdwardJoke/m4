@@ -362,9 +362,7 @@ fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
         const node = arena.get(stmt_idx);
         if (node == .use_stmt) {
             const path = node.use_stmt.path;
-            if (std.mem.eql(u8, path, "io")) {
-                try m4.stdlib.io.register(vm);
-            } else if (std.mem.eql(u8, path, "std")) {
+            if (std.mem.eql(u8, path, "std")) {
                 try m4.stdlib.std.register(vm);
             } else if (std.mem.eql(u8, path, "thread")) {
                 try m4.stdlib.thread.register(vm);

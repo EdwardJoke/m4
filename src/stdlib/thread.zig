@@ -2,7 +2,7 @@ const std = @import("std");
 const VM = @import("../vm.zig");
 const value = @import("../value.zig");
 const object = @import("../object.zig");
-const io = @import("io.zig");
+const m4_std = @import("std.zig");
 
 const CHANNEL_CAP = 64;
 
@@ -78,7 +78,7 @@ fn threadEntry(info: *SpawnInfo) void {
     var child_vm = VM.init(allocator);
     defer child_vm.deinit();
 
-    io.register(&child_vm) catch {};
+    m4_std.register(&child_vm) catch {};
     register(&child_vm) catch {};
 
     // Copy arguments into registers 0..arg_count

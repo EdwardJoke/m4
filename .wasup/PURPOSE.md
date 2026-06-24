@@ -1,12 +1,12 @@
-# v0.2.2 Purpose
+# v0.3.0 Purpose
 
 ## What
-Ship v0.2.2 stable from rc1 with comprehensive speed tests, performance benchmarking, compute usage profiling, and stabilization fixes.
+Ship v0.3.0 with io→std module consolidation, comprehensive API documentation, polished CLI, and optimized error messages.
 
 ## Why
-v0.2.2-rc1 shipped new stdlib modules (fs, str), CLI UX improvements (lint subcommand, -h flag), and QBE cross-compilation fixes. This stable release validates that m4 delivers on its performance promise — at least 10x faster than Python on the hardspeed benchmark — profiles CPU/memory usage, and fixes any remaining rc1 issues.
+The io/std module duplication confuses users and creates maintenance overhead. The language lacks proper API documentation for developer adoption. The CLI and error UX need polish for production readiness.
 
 ## Success Criteria
-- [x] m4 is faster than Python on the hardspeed Fibonacci benchmark (achieved 1.57x)
-- [x] All existing unit tests pass, no regressions
-- [x] Compute usage (execution time + memory) profiled and documented
+- [ ] No `io` module — all print/read functionality lives in `std` (zero code duplication)
+- [ ] SPEC.md and language docs document every public stdlib API
+- [ ] CLI help text is clean, error messages are concise with source location info
