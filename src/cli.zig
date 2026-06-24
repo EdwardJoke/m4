@@ -704,7 +704,7 @@ fn wrapReplInput(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
         }
     }
 
-    // Don't wrap function calls like io.println(...) or foo(...)
+    // Don't wrap function calls like std.println(...) or foo(...)
     if (looksLikeCall(input)) return input;
 
     const wrapped = try allocator.alloc(u8, "std.println(".len + input.len + ")".len);

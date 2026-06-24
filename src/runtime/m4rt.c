@@ -393,5 +393,3 @@ int64_t m4_std_range(int64_t start, int64_t end) {
     }
     return vec;
 }
-
-

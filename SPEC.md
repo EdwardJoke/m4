@@ -66,9 +66,9 @@ Example:
 
 ```m4
 if x > 10
-    io.println("large")
+    std.println("large")
 else
-    io.println("small")
+    std.println("small")
 ```
 
 ---
@@ -417,7 +417,7 @@ The standard library should remain:
 ## Initial Modules
 
 ```text
-io
+std
 fs
 str
 net
@@ -452,14 +452,14 @@ The following are intentionally excluded from v0.2:
 # Example Program
 
 ```m4
-use io
+use std
 
 type User
     name str
     age  i32
 
 fun greet(u User)
-    io.println("hello " + u.name)
+    std.println("hello " + u.name)
 
 pub fun main() i32
     let user User = User(
@@ -470,7 +470,7 @@ pub fun main() i32
     greet(user)
 
     for n in [1, 2, 3]
-        io.println(n)
+        std.println(n)
 
     ret 0
 ```
