@@ -196,7 +196,7 @@ pub fn run(self: *VM) !void {
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = a.int + b.int };
                 } else if ((a == .string or a == .string_builder) and (b == .string or b == .string_builder)) {
-                    self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r012", "out of memory", .{});
+                    self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r014", "out of memory", .{});
                 } else {
                     self.registers[base + d.a] = binaryOp(.add, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in + operation", .{});
                 }
@@ -441,7 +441,7 @@ pub fn run(self: *VM) !void {
             .new_vec => {
                 const d = OpCode.decodeABx(inst);
                 const v = try self.allocator.create(VecObj);
-                v.items = std.ArrayList(Value.Value).initCapacity(self.allocator, d.bx) catch return self.runtimeError("r012", "out of memory", .{});
+                v.items = std.ArrayList(Value.Value).initCapacity(self.allocator, d.bx) catch return self.runtimeError("r014", "out of memory", .{});
                 for (0..d.bx) |_| v.items.appendAssumeCapacity(.nil);
                 self.registers[base + d.a] = .{ .vec = v };
                 pc += 1;

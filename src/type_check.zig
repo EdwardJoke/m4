@@ -79,16 +79,16 @@ pub const Checker = struct {
         self.type_defs.deinit();
     }
 
-    fn typeError(self: *Checker, msg: []const u8) void {
+    fn typeError(self: *Checker, comptime code: []const u8, msg: []const u8) void {
         self.error_count += 1;
         if (self.diag) |diag| {
             diag.add(self.allocator, .{
                 .severity = .@"error",
-                .code = "t001",
+                .code = code,
                 .message = msg,
             }) catch {};
         } else {
-            std.debug.print("[t001] Type Error: {s}\n", .{msg});
+            std.debug.print("[{s}] Type Error: {s}\n", .{ code, msg });
         }
     }
 
@@ -106,7 +106,7 @@ pub const Checker = struct {
                     return self.allocType(.{ .primitive = p });
                 }
                 if (self.type_defs.get(node.ident)) |t| return t;
-                self.typeError("Unknown type");
+                self.typeError("t001", "Unknown type");
                 return self.allocType(.{ .primitive = .i32 });
             },
             .type_ident => |name| {
@@ -114,7 +114,7 @@ pub const Checker = struct {
                     return self.allocType(.{ .primitive = p });
                 }
                 if (self.type_defs.get(name)) |t| return t;
-                self.typeError("Unknown type");
+                self.typeError("t001", "Unknown type");
                 return self.allocType(.{ .primitive = .i32 });
             },
             .type_vec => |inner| {
@@ -136,7 +136,7 @@ pub const Checker = struct {
                 return self.allocType(.{ .res = .{ .ok = @constCast(ok_t), .err = @constCast(err_t) } });
             },
             else => {
-                self.typeError("Invalid type expression");
+                self.typeError("t001", "Invalid type expression");
                 return self.allocType(.{ .primitive = .i32 });
             },
         }
@@ -204,7 +204,7 @@ pub const Checker = struct {
             .for_stmt => try self.checkForInEnv(env, node_idx),
             .ret_stmt => try self.checkRetInEnv(env, node_idx),
             .continue_stmt, .esc_stmt => {
-                if (!env.in_loop) self.typeError("continue/esc outside of loop");
+                if (!env.in_loop) self.typeError("t001", "continue/esc outside of loop");
             },
             .block => {
                 var child_env = env.child(self.allocator);
@@ -230,7 +230,7 @@ pub const Checker = struct {
             if (declared_type) |dt| {
                 // Check if value type is compatible with declared type
                 if (!isCompatible(val_type, dt)) {
-                    self.typeError("Type mismatch in variable declaration");
+                    self.typeError("t004", "Type mismatch in variable declaration");
                 }
                 // Use declared type as final type
                 final_type = dt;
@@ -289,13 +289,13 @@ pub const Checker = struct {
     fn checkRetInEnv(self: *Checker, env: *TypeEnv, node_idx: usize) (error{OutOfMemory})!void {
         const rs = self.arena.get(node_idx).ret_stmt;
         if (env.return_type == null) {
-            self.typeError("ret outside of function");
+            self.typeError("t009", "ret outside of function");
             return;
         }
         if (rs) |val_idx| {
             const val_type = try self.checkExprInEnv(env, val_idx);
             if (!isCompatible(val_type, env.return_type.?)) {
-                self.typeError("Return type mismatch");
+                self.typeError("t005", "Return type mismatch");
             }
         }
     }
@@ -351,7 +351,7 @@ pub const Checker = struct {
             .nil_lit => self.allocType(.void_type),
             .ident => |name| {
                 if (env.lookup(name)) |s| return s.typ;
-                self.typeError("Undefined variable");
+                self.typeError("t002", "Undefined variable");
                 return self.allocType(.{ .primitive = .i32 });
             },
             .field => |f| {
@@ -389,17 +389,17 @@ pub const Checker = struct {
                 {
                     if (b.op == .add) return self.allocType(.{ .primitive = .str });
                 }
-                self.typeError("Arithmetic requires numeric operands");
+                self.typeError("t007", "Arithmetic requires numeric operands");
                 return self.allocType(.{ .primitive = .i32 });
             },
             .eq, .neq, .gt, .lt, .gte, .lte => {
                 if (isComparable(lt, rt)) return self.allocType(.{ .primitive = .bool });
-                self.typeError("Incomparable types");
+                self.typeError("t007", "Incomparable types");
                 return self.allocType(.{ .primitive = .bool });
             },
             .and_, .or_ => {
                 if (isBoolish(lt) and isBoolish(rt)) return self.allocType(.{ .primitive = .bool });
-                self.typeError("Logical operators require boolean operands");
+                self.typeError("t007", "Logical operators require boolean operands");
                 return self.allocType(.{ .primitive = .bool });
             },
         }
@@ -410,12 +410,12 @@ pub const Checker = struct {
         switch (u.op) {
             .neg => {
                 if (isNumeric(ot)) return ot;
-                self.typeError("Negation requires numeric operand");
+                self.typeError("t007", "Negation requires numeric operand");
                 return self.allocType(.{ .primitive = .i32 });
             },
             .not => {
                 if (isBoolish(ot)) return self.allocType(.{ .primitive = .bool });
-                self.typeError("Not requires boolean operand");
+                self.typeError("t007", "Not requires boolean operand");
                 return self.allocType(.{ .primitive = .bool });
             },
         }
@@ -441,7 +441,7 @@ pub const Checker = struct {
         for (items[1..]) |item_idx| {
             const t = try self.checkExprInEnv(env, item_idx);
             if (!isCompatible(t, elem_type)) {
-                self.typeError("Vec elements must have same type");
+                self.typeError("t001", "Vec elements must have same type");
             }
         }
         return self.allocType(.{ .vec = @constCast(elem_type) });
@@ -450,17 +450,17 @@ pub const Checker = struct {
     fn checkAssignInEnv(self: *Checker, env: *TypeEnv, a: anytype) (error{OutOfMemory})!*const Type.Type {
         const target = self.arena.get(a.target);
         if (target != .ident) {
-            self.typeError("Can only assign to variables");
+            self.typeError("t001", "Can only assign to variables");
             return self.allocType(.{ .primitive = .i32 });
         }
         const name = target.ident;
         const sym = env.lookup(name) orelse {
-            self.typeError("Assignment to undefined variable");
+            self.typeError("t002", "Assignment to undefined variable");
             return self.allocType(.{ .primitive = .i32 });
         };
-        if (!sym.mutable) self.typeError("Cannot assign to immutable variable");
+        if (!sym.mutable) self.typeError("t008", "Cannot assign to immutable variable");
         const val_type = try self.checkExprInEnv(env, a.value);
-        if (!isCompatible(val_type, sym.typ)) self.typeError("Assignment type mismatch");
+        if (!isCompatible(val_type, sym.typ)) self.typeError("t004", "Assignment type mismatch");
         return sym.typ;
     }
 };
