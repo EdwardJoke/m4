@@ -399,7 +399,7 @@ fn errorAt(self: *Parser, token: Token.Token, msg: []const u8) error{ParseError}
             .location = .{ .file = "<source>", .line = token.line, .column = 0 },
         }) catch {};
     } else {
-        std.debug.print("[line {d}] Parse error: {s}\n", .{ token.line, msg });
+        std.debug.print("[p001] Parse Error: {s} [line {d}]\n", .{ msg, token.line });
     }
     return error.ParseError;
 }

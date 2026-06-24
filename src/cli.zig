@@ -286,10 +286,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.ParseError;
         }
-        std.debug.print("Parse error: {}\n", .{err});
-        return;
+        std.debug.print("[p001] Parse Error: {s}\n", .{@errorName(err)});
+        return error.ParseError;
     };
 
     // Type checking
@@ -332,10 +332,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.CompileError;
         }
-        std.debug.print("Compile error: {}\n", .{err});
-        return;
+        std.debug.print("[c001] Compile Error: out of memory\n", .{});
+        return error.CompileError;
     };
 
     if (flags.debug_mode) {
@@ -350,10 +350,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.RuntimeError;
         }
-        std.debug.print("Runtime error: {}\n", .{err});
-        return;
+        std.debug.print("[r011] Runtime Error: unexpected error\n", .{});
+        return error.RuntimeError;
     };
 }
 
@@ -405,18 +405,18 @@ fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Fl
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.ParseError;
         }
-        std.debug.print("Parse error: {}\n", .{err});
-        return;
+        std.debug.print("[p001] Parse Error: {s}\n", .{@errorName(err)});
+        return error.ParseError;
     };
 
     var checker = m4.type_check.Checker.init(allocator, &parser.arena);
     defer checker.deinit();
     if (flags.error_format != null) checker.diag = &diag_list;
-    checker.check(stmts) catch |err| {
-        std.debug.print("Type check error: {}\n", .{err});
-        return;
+    checker.check(stmts) catch {
+        std.debug.print("[t001] Type Error: internal checker error\n", .{});
+        return error.ParseError;
     };
     if (checker.error_count > 0) {
         if (flags.error_format) |fmt| {
@@ -426,6 +426,7 @@ fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Fl
         } else {
             std.debug.print("{d} type error(s) found.\n", .{checker.error_count});
         }
+        return error.ParseError;
     } else {
         std.debug.print("Type checking passed.\n", .{});
     }
@@ -641,7 +642,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         while (true) {
             const n = posix.read(posix.STDIN_FILENO, &byte) catch |err| {
                 if (err == error.WouldBlock) continue;
-                std.debug.print("Input error: {}\n", .{err});
+                std.debug.print("[r011] Runtime Error: stdin read failed\n", .{});
                 return;
             };
             if (n == 0) return; // EOF
@@ -665,7 +666,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         defer parser.deinit();
 
         const stmts = parser.parse() catch |err| {
-            if (err != error.ParseError) std.debug.print("Parse error: {}\n", .{err});
+            if (err != error.ParseError) std.debug.print("[p001] Parse Error: unexpected error\n", .{});
             continue;
         };
 
@@ -673,7 +674,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         defer compiler.deinit();
 
         compiler.compile(stmts) catch |err| {
-            if (err != error.CompileError) std.debug.print("Compile error: {}\n", .{err});
+            if (err != error.CompileError) std.debug.print("[c001] Compile Error: unexpected error\n", .{});
             continue;
         };
 
@@ -684,7 +685,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         try resolveUses(&vm, &parser.arena, stmts);
 
         vm.interpret(&compiler.chunk) catch |err| {
-            if (err != error.RuntimeError) std.debug.print("Runtime error: {}\n", .{err});
+            if (err != error.RuntimeError) std.debug.print("[r011] Runtime Error: unexpected error\n", .{});
             continue;
         };
     }
@@ -750,8 +751,14 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
 
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, std.Io.Limit.limited(1024 * 1024)) catch |err| {
-        std.debug.print("m4: cannot read '{s}': {}\n", .{ path, err });
-        return err;
+        const clean_msg: []const u8 = switch (err) {
+            error.FileNotFound => "file not found",
+            error.AccessDenied => "permission denied",
+            error.IsDir => "is a directory",
+            else => @errorName(err),
+        };
+        std.debug.print("m4: error: cannot read '{s}': {s}\n", .{ path, clean_msg });
+        return error.ParseError;
     };
 }
 

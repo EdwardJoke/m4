@@ -84,7 +84,7 @@ pub const Compiler = struct {
                 .message = msg,
             }) catch {};
         } else {
-            std.debug.print("Compile error [{s}]: {s}\n", .{ code, msg });
+            std.debug.print("[{s}] Compile Error: {s}\n", .{ code, msg });
         }
         return error.CompileError;
     }
