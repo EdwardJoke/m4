@@ -1,4 +1,4 @@
-# m4 Language Specification (Draft v0.2.2)
+# m4 Language Specification (Draft v0.3.0)
 
 ## Overview
 
@@ -406,6 +406,305 @@ A formatter must produce:
 
 ---
 
+# Standard Library Reference
+
+The standard library provides a small set of orthogonal modules.
+Each module is loaded explicitly via `use <module>`.
+
+## `std` — Core I/O and Utilities
+
+The `std` module provides basic input/output operations and utility functions.
+
+```m4
+use std
+```
+
+### `std.println(value)`
+
+Print a value to stdout followed by a newline.
+
+- **Parameters:** `value` — any type (int, float, bool, string, char, nil). Accepts multiple arguments.
+- **Returns:** `nil`
+
+```m4
+std.println(42)            # 42
+std.println("hello")       # hello
+std.println(true)           # true
+std.println(3.14)           # 3.14
+std.println(1, 2, 3)        # 1 2 3  (multiple arguments)
+std.println("line " + 1)    # line 1  (string concatenation)
+```
+
+### `std.print(value)`
+
+Print a value to stdout without a trailing newline.
+
+- **Parameters:** `value` — any type. Accepts multiple arguments.
+- **Returns:** `nil`
+
+```m4
+std.print("hello ")
+std.println("world")    # hello world (on one line)
+```
+
+### `std.readln()`
+
+Read a line of text from stdin (up to the next newline).
+
+- **Parameters:** none
+- **Returns:** `str` — the line of text (excluding newline), or `nil` on error
+
+```m4
+let name = std.readln()
+std.println("Hello, " + name)
+```
+
+### `std.read()`
+
+Read all remaining data from stdin until EOF.
+
+- **Parameters:** none
+- **Returns:** `str` — all data read from stdin, or `nil` on error
+
+```m4
+let data = std.read()
+std.println("Read " + str.len(data) + " bytes")
+```
+
+### `std.readChar()`
+
+Read a single Unicode character from stdin.
+
+- **Parameters:** none
+- **Returns:** `char` — the character read (or `0` on EOF)
+
+```m4
+let ch = std.readChar()
+std.println(ch)
+```
+
+### `std.range(start, end)`
+
+Generate a vector of integers from `start` (inclusive) to `end` (exclusive).
+
+This is identical to `range.range()`. Both are available for convenience.
+
+- **Parameters:** `start i32`, `end i32`
+- **Returns:** `vec[i32]`
+
+```m4
+for n in std.range(0, 5)
+    std.println(n)       # 0, 1, 2, 3, 4
+```
+
+---
+
+## `fs` — File System
+
+The `fs` module provides basic file system operations.
+
+```m4
+use fs
+```
+
+### `fs.read(path)`
+
+Read the entire contents of a file.
+
+- **Parameters:** `path str` — path to the file
+- **Returns:** `str` on success, `nil` on error (file not found, permission denied, etc.)
+
+```m4
+let content = fs.read("/tmp/data.txt")
+if content != nil
+    std.println(content)
+```
+
+### `fs.write(path, data)`
+
+Write data to a file, overwriting if it exists.
+
+- **Parameters:** `path str`, `data str`
+- **Returns:** `bool` — `true` on success, `false` on error
+
+```m4
+let ok = fs.write("/tmp/output.txt", "Hello, file!")
+if ok
+    std.println("Write successful")
+```
+
+### `fs.exists(path)`
+
+Check whether a file exists at the given path.
+
+- **Parameters:** `path str`
+- **Returns:** `bool`
+
+```m4
+if fs.exists("/tmp/data.txt")
+    std.println("File exists")
+```
+
+### `fs.delete(path)`
+
+Delete a file from the filesystem.
+
+- **Parameters:** `path str`
+- **Returns:** `bool` — `true` on success, `false` on error
+
+```m4
+let ok = fs.delete("/tmp/temp.txt")
+if ok
+    std.println("Deleted")
+```
+
+---
+
+## `str` — String Utilities
+
+The `str` module provides string introspection and manipulation.
+
+```m4
+use str
+```
+
+### `str.len(s)`
+
+Return the byte length of a string.
+
+- **Parameters:** `s str`
+- **Returns:** `i32` — byte length (0 for empty string, 0 for non-string arguments)
+
+```m4
+let len = str.len("hello")    # 5
+std.println(len)
+```
+
+### `str.slice(s, start, end)`
+
+Extract a substring (byte-level slicing).
+
+- **Parameters:** `s str`, `start i32`, `end i32`
+- **Returns:** `str` on success, `nil` on error (out of bounds, negative indices, start > end)
+
+```m4
+let s = "hello"
+let sub = str.slice(s, 0, 2)   # "he"
+std.println(sub)
+
+let sub2 = str.slice(s, 2, 5)  # "llo"
+std.println(sub2)
+```
+
+---
+
+## `thread` — Concurrency
+
+The `thread` module provides thread spawning and message passing via channels.
+
+```m4
+use thread
+```
+
+### `thread.spawn(fun, ...)`
+
+Spawn a function in a new thread. The function receives the provided arguments.
+
+- **Parameters:** `fun` — a function (up to 8 arguments supported)
+- **Returns:** handle (opaque vec) — pass to `thread.join()` to retrieve the result
+
+```m4
+fun compute(x i32) i32
+    ret x * 2
+
+let handle = thread.spawn(compute, 21)
+let result = thread.join(handle)
+std.println(result)     # 42
+```
+
+### `thread.join(handle)`
+
+Join a spawned thread and retrieve its return value.
+
+- **Parameters:** `handle` — the handle returned by `thread.spawn()`
+- **Returns:** the return value of the spawned function
+
+```m4
+let handle = thread.spawn(my_func, 10, 20)
+let result = thread.join(handle)
+```
+
+### `thread.channel()`
+
+Create a new channel for sending values between threads (capacity: 64).
+
+- **Parameters:** none
+- **Returns:** channel (opaque vec)
+
+```m4
+let ch = thread.channel()
+```
+
+### `thread.send(channel, value)`
+
+Send a value into a channel. Blocks if the channel is full.
+
+- **Parameters:** `channel`, `value` — any type
+- **Returns:** `bool` — `true` on success, `false` if channel is closed
+
+```m4
+let ok = thread.send(ch, 42)
+```
+
+### `thread.recv(channel)`
+
+Receive a value from a channel. Blocks if the channel is empty.
+
+- **Parameters:** `channel`
+- **Returns:** the value sent through the channel, or `nil` if channel is closed and empty
+
+```m4
+let val = thread.recv(ch)
+std.println(val)
+```
+
+**Example — Producer/Consumer Pattern:**
+
+```m4
+let ch = thread.channel()
+
+thread.send(ch, 10)
+thread.send(ch, 20)
+
+let r1 = thread.recv(ch)   # 10
+let r2 = thread.recv(ch)   # 20
+```
+
+---
+
+## `range` — Range Generation
+
+The `range` module generates numeric ranges as vectors.
+
+```m4
+use range
+```
+
+### `range.range(start, end)`
+
+Generate a vector of integers from `start` (inclusive) to `end` (exclusive).
+
+- **Parameters:** `start i32`, `end i32`
+- **Returns:** `vec[i32]`
+
+```m4
+let nums = range.range(0, 3)   # [0, 1, 2]
+for n in nums
+    std.println(n)
+```
+
+---
+
 # Standard Library Philosophy
 
 The standard library should remain:
@@ -414,21 +713,7 @@ The standard library should remain:
 * orthogonal
 * capability-oriented
 
-## Initial Modules
-
-```text
-std
-fs
-str
-net
-json
-time
-proc
-path
-env
-```
-
----
+Planned future modules (`net`, `json`, `time`, `proc`, `path`, `env`) are not yet implemented.
 
 # Features Explicitly Excluded
 
