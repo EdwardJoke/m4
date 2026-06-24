@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Self = @This();
 
+/// Runtime value representation for the m4 VM. A tagged union of all possible value types.
 pub const Value = union(enum) {
     nil: void,
     bool: bool,
@@ -14,6 +15,7 @@ pub const Value = union(enum) {
     fun_obj: *anyopaque,
     vec: *anyopaque,
 
+    /// Check structural equality between two values. Compares by type and content.
     pub fn eql(self: Value, other: Value) bool {
         if (@intFromEnum(self) != @intFromEnum(other)) return false;
         return switch (self) {
@@ -35,6 +37,7 @@ pub const Value = union(enum) {
         };
     }
 
+    /// Return the truthiness of a value: nil and false are falsy, everything else is truthy.
     pub fn isTruthy(self: Value) bool {
         return switch (self) {
             .nil => false,
@@ -45,6 +48,7 @@ pub const Value = union(enum) {
         };
     }
 
+    /// Format a value for display (implements std.fmt.format).
     pub fn format(self: Value, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
             .nil => try writer.writeAll("nil"),

@@ -38,6 +38,8 @@ pub const UsageMode = cli_info.UsageMode;
 pub const HelpInfo = cli_info.HelpInfo;
 pub const VersionInfo = cli_info.VersionInfo;
 
+/// Main CLI entry point. Parses flags, dispatches to subcommands (help, version, lint, build, explain),
+/// or runs/executes m4 source files. Launches REPL if no file is provided.
 pub fn run(init: std.process.Init) !void {
     const arena_alloc = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena_alloc);

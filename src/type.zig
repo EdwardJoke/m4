@@ -17,6 +17,7 @@ pub const Primitive = enum {
     bytes,
 };
 
+/// The m4 type system representation. A tagged union of primitive, generic, function, and named types.
 pub const Type = union(enum) {
     primitive: Primitive,
     vec: *Type,
@@ -27,6 +28,7 @@ pub const Type = union(enum) {
     named: []const u8,
     void_type,
 
+    /// Check structural equality between two types (recursing into generics and function params).
     pub fn eql(a: *const Type, b: *const Type) bool {
         if (@intFromEnum(a.*) != @intFromEnum(b.*)) return false;
         return switch (a.*) {
@@ -47,6 +49,7 @@ pub const Type = union(enum) {
         };
     }
 
+    /// Format a type for display (implements std.fmt.format).
     pub fn format(self: *const Type, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self.*) {
             .primitive => |p| try writer.print("{s}", .{@tagName(p)}),
@@ -69,6 +72,7 @@ pub const Type = union(enum) {
     }
 };
 
+/// Parse a type name string into a Primitive enum. Returns null for non-primitive names.
 pub fn parseTypeName(name: []const u8) ?Primitive {
     const m = std.StaticStringMap(Primitive).initComptime(.{
         .{ "i8", .i8 },

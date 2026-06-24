@@ -39,6 +39,7 @@ previous: Token.Token,
 had_error: bool,
 diag: ?*err.DiagnosticList = null,
 
+/// Initialize a new parser for the given source string. Automatically advances to the first token.
 pub fn init(allocator: std.mem.Allocator, source: []const u8) Parser {
     var p = Parser{
         .allocator = allocator,
@@ -52,11 +53,13 @@ pub fn init(allocator: std.mem.Allocator, source: []const u8) Parser {
     return p;
 }
 
+/// Deinitialize the parser, freeing the scanner and AST arena.
 pub fn deinit(self: *Parser) void {
     self.scanner.deinit();
     self.arena.deinit();
 }
 
+/// Parse the entire source into a list of AST statement indices. Returns ParseError on syntax errors.
 pub fn parse(self: *Parser) ![]const usize {
     var stmts = std.ArrayList(usize).empty;
     self.skipNewlines();

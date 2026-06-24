@@ -44,15 +44,18 @@ pub const DiagnosticList = struct {
     error_count: u32 = 0,
     warning_count: u32 = 0,
 
+        /// Create an empty diagnostic list.
     pub fn init() DiagnosticList {
         return .{};
     }
 
+    /// Deinitialize the diagnostic list, freeing all owned memory.
     pub fn deinit(self: *DiagnosticList, allocator: std.mem.Allocator) void {
         self.diagnostics.deinit(allocator);
         self.* = undefined;
     }
 
+    /// Add a diagnostic to the list, incrementing the appropriate severity counter.
     pub fn add(self: *DiagnosticList, allocator: std.mem.Allocator, d: Diagnostic) !void {
         try self.diagnostics.append(allocator, d);
         switch (d.severity) {
@@ -62,15 +65,18 @@ pub const DiagnosticList = struct {
         }
     }
 
+    /// Returns true if any error-severity diagnostics have been added.
     pub fn hasErrors(self: *const DiagnosticList) bool {
         return self.error_count > 0;
     }
 
+    /// Return all diagnostics in the list.
     pub fn items(self: *const DiagnosticList) []const Diagnostic {
         return self.diagnostics.items;
     }
 };
 
+/// Serialize a slice of diagnostics to the given format (ZON, JSON, or YAML).
 pub fn formatDiagnostics(
     allocator: std.mem.Allocator,
     diagnostics: []const Diagnostic,
@@ -136,6 +142,7 @@ pub const ERROR_DB = [_]ErrorInfo{
     .{ .code = "r016", .title = "I/O Error", .description = "An input/output operation failed — e.g., reading from a closed stdin, writing to a read-only file, or a broken pipe." },
 };
 
+/// Look up an error code in ERROR_DB and return a human-readable explanation.
 pub fn explainError(allocator: std.mem.Allocator, code: []const u8, format: ?Format) ![]const u8 {
     const info = lookupError(code) orelse {
         return std.fmt.allocPrint(allocator, "Unknown error code: {s}", .{code});

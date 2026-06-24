@@ -55,7 +55,8 @@ pub const Compiler = struct {
     error_count: u32,
     diag: ?*err_mod.DiagnosticList = null,
 
-    pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
+    /// Initialize a new compiler with the given allocator and AST arena.
+pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
         return .{
             .allocator = allocator,
             .chunk = Chunk.init(allocator),
@@ -67,7 +68,8 @@ pub const Compiler = struct {
         };
     }
 
-    pub fn deinit(self: *Compiler) void {
+    /// Deinitialize the compiler, freeing all owned resources.
+pub fn deinit(self: *Compiler) void {
         self.chunk.deinit();
         self.locals.deinit(self.allocator);
         for (self.loop_stack.items) |*lp| lp.exit_patches.deinit(self.allocator);
@@ -124,6 +126,7 @@ pub const Compiler = struct {
         return self.locals.resolve(name);
     }
 
+    /// Compile a list of AST statement indices into bytecode. Auto-calls main() if defined.
     pub fn compile(self: *Compiler, stmts: []const usize) Error!void {
         var has_main = false;
         for (stmts) |stmt_idx| {

@@ -15,6 +15,7 @@ pub const TypeEnv = struct {
     return_type: ?*const Type.Type,
     in_loop: bool,
 
+        /// Create a new root type environment with no parent scope.
     pub fn init(allocator: std.mem.Allocator) TypeEnv {
         return .{
             .parent = null,
@@ -24,6 +25,7 @@ pub const TypeEnv = struct {
         };
     }
 
+    /// Create a child scope that inherits the parent's return type and loop context.
     pub fn child(self: *const TypeEnv, allocator: std.mem.Allocator) TypeEnv {
         return .{
             .parent = self,
@@ -33,14 +35,17 @@ pub const TypeEnv = struct {
         };
     }
 
+    /// Deinitialize the type environment, freeing the symbols hash map.
     pub fn deinit(self: *TypeEnv) void {
         self.symbols.deinit();
     }
 
+    /// Define a new symbol in the current scope with the given type and mutability.
     pub fn define(self: *TypeEnv, name: []const u8, typ: *const Type.Type, mutable: bool) !void {
         try self.symbols.put(name, .{ .name = name, .typ = typ, .mutable = mutable });
     }
 
+    /// Look up a symbol by name, searching up through parent scopes. Returns null if not found.
     pub fn lookup(self: *const TypeEnv, name: []const u8) ?Symbol {
         if (self.symbols.get(name)) |s| return s;
         if (self.parent) |p| return p.lookup(name);
@@ -62,6 +67,7 @@ pub const Checker = struct {
         env: *TypeEnv,
     };
 
+    /// Initialize a new type checker with the given allocator and AST arena.
     pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Checker {
         return .{
             .allocator = allocator,
@@ -73,6 +79,7 @@ pub const Checker = struct {
         };
     }
 
+    /// Deinitialize the type checker, freeing all owned resources.
     pub fn deinit(self: *Checker) void {
         self.root_env.deinit();
         self.type_arena.deinit();
@@ -142,6 +149,7 @@ pub const Checker = struct {
         }
     }
 
+    /// Run two-pass type checking: collect type declarations first, then check all statements.
     pub fn check(self: *Checker, stmts: []const usize) (error{OutOfMemory})!void {
         // Pass 1: collect type declarations and register native functions
         for (stmts) |stmt_idx| {

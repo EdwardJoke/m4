@@ -1,6 +1,7 @@
 const std = @import("std");
 const ast = @import("ast.zig");
 
+/// Pretty-print an AST node to stderr with the given indentation level.
 pub fn formatNode(arena: *ast.NodeArena, node_idx: usize, indent: u32) void {
     const node = arena.get(node_idx);
     writeIndent(indent);

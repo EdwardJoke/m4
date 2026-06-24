@@ -37,6 +37,7 @@ globals: std.StringHashMap(Value.Value),
 diag: ?*err_mod.DiagnosticList = null,
 global_cache: [4]GlobalCache = [_]GlobalCache{.{ .name = "", .value = .nil }} ** 4,
 
+/// Initialize a new VM with the given allocator. All registers default to nil.
 pub fn init(allocator: std.mem.Allocator) VM {
     return .{
         .allocator = allocator,
@@ -49,14 +50,17 @@ pub fn init(allocator: std.mem.Allocator) VM {
     };
 }
 
+/// Deinitialize the VM, freeing the globals hash map.
 pub fn deinit(self: *VM) void {
     self.globals.deinit();
 }
 
+/// Register a native function by name, making it callable from m4 code.
 pub fn registerNative(self: *VM, name: []const u8, ptr: *anyopaque) !void {
     try self.globals.put(name, .{ .@"fn" = ptr });
 }
 
+/// Interpret (execute) a compiled bytecode chunk. Sets up the initial call frame and runs.
 pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     self.chunk = chunk;
     self.pc = 0;
@@ -122,6 +126,7 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
     };
 }
 
+/// Main VM dispatch loop. Executes bytecode instructions until halt or error.
 pub fn run(self: *VM) !void {
     var frame: *CallFrame = &self.frames[0];
     var code: []const u32 = frame.code;

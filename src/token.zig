@@ -64,20 +64,24 @@ pub const Tag = enum(u8) {
     err,
 };
 
+/// A lexical token with its tag, source lexeme, and line number.
 pub const Token = struct {
     tag: Tag,
     start: []const u8,
     line: u32,
 
+    /// Return the source text of this token.
     pub fn lexeme(self: Token) []const u8 {
         return self.start;
     }
 
+    /// Format a token for display (implements std.fmt.format). Shows the tag name.
     pub fn format(self: Token, comptime _: []const u8, _: std.fmt.FormatOptions, writer: anytype) !void {
         try writer.print("{s}", .{@tagName(self.tag)});
     }
 };
 
+/// Returns true if the token tag is a keyword.
 pub fn isKeyword(tag: Tag) bool {
     return switch (tag) {
         .kw_let, .kw_mut, .kw_fun, .kw_pub,
@@ -88,6 +92,7 @@ pub fn isKeyword(tag: Tag) bool {
     };
 }
 
+/// Look up a keyword tag by name. Returns null for non-keyword identifiers.
 pub fn keywordTag(name: []const u8) ?Tag {
     const k = std.StaticStringMap(Tag).initComptime(.{
         .{ "let", .kw_let },
