@@ -715,6 +715,81 @@ The standard library should remain:
 
 Planned future modules (`net`, `json`, `time`, `proc`, `path`, `env`) are not yet implemented.
 
+---
+
+# Error Codes Reference
+
+All diagnostic errors use a structured code format: `[{code}] {Stage}: {message}`.
+Codes are grouped by pipeline stage and can be looked up with `m4 explain <code>`.
+
+## Parse Errors
+
+| Code | Title | When it occurs |
+|------|-------|----------------|
+| `p001` | Syntax Error | Unexpected token, missing delimiter, or malformed expression |
+| `p002` | Unexpected End of Input | Source ended prematurely (incomplete expression, unclosed block) |
+| `p003` | Indentation Error | Indentation doesn't match any enclosing block |
+| `p004` | Invalid Literal | A numeric literal (int or float) couldn't be parsed |
+
+## Type Errors
+
+| Code | Title | When it occurs |
+|------|-------|----------------|
+| `t001` | Type Mismatch | Value used in a context expecting a different type |
+| `t002` | Undefined Variable | Variable referenced before declaration |
+| `t003` | Duplicate Declaration | Same variable name declared twice in the same scope |
+| `t004` | Type Mismatch in Binding | Assigned value doesn't match the variable's declared type |
+| `t005` | Return Type Mismatch | `ret` value doesn't match the function's return type |
+| `t006` | Arity Mismatch | Function called with wrong number of arguments |
+| `t007` | Invalid Operator for Type | Operator used on unsupported types (e.g., arithmetic on booleans) |
+| `t008` | Assignment to Immutable Variable | Trying to assign to a `let` variable (use `mut` instead) |
+| `t009` | ret Outside Function | `ret` used outside of a `fun` block |
+
+## Compile Errors
+
+| Code | Title | When it occurs |
+|------|-------|----------------|
+| `c001` | Compile Error | Internal compiler error (unsupported construct or compiler limit) |
+| `c002` | Continue Outside Loop | `continue` used outside a loop body |
+| `c003` | Esc Outside Loop | `esc` used outside a loop body |
+| `c004` | Too Many Constants | Constant table exceeded 65535 entries |
+| `c005` | Too Many Locals | More than 256 local variables in a function |
+| `c006` | Compile Error in Function | Error compiling a specific function body |
+
+## Runtime Errors
+
+| Code | Title | When it occurs |
+|------|-------|----------------|
+| `r001` | Undefined Variable | Global variable referenced before assignment |
+| `r002` | Type Mismatch in Binary Operation | Binary operator applied to incompatible types |
+| `r003` | Type Mismatch in Modulo | `%` applied to non-integer values |
+| `r004` | Type Mismatch in Negation | `-` applied to non-numeric value |
+| `r005` | Type Mismatch in Comparison | `>`, `<`, `>=`, `<=` applied to incompatible types |
+| `r006` | Stack Overflow | Call stack exceeded 64 frames (infinite recursion) |
+| `r007` | Value Not Callable | Non-function value used in a call expression |
+| `r008` | Index Out of Bounds | Vector/string index outside valid range |
+| `r009` | Not Indexable | Index operation applied to non-vector/non-string |
+| `r010` | Nil Propagation | Nil value unwrapped with `!` operator |
+| `r011` | Unknown Opcode | VM encountered unrecognized bytecode instruction |
+| `r012` | Division by Zero | Division where divisor is zero |
+| `r013` | Modulo by Zero | Modulo where divisor is zero |
+| `r014` | Out of Memory | Allocator failed to allocate memory |
+| `r015` | Invalid Argument | Native function received wrong argument type |
+| `r016` | I/O Error | Input/output operation failed (broken pipe, permission denied, etc.) |
+
+## Using Error Codes
+
+```bash
+# Look up an error code's description
+m4 explain r006
+
+# Get structured output
+m4 explain t001 --format json
+m4 explain p002 --format yaml
+```
+
+---
+
 # Features Explicitly Excluded
 
 The following are intentionally excluded from v0.2:
