@@ -95,7 +95,7 @@ pub const Checker = struct {
                 .message = msg,
             }) catch {};
         } else {
-            std.debug.print("[{s}] Type Error: {s}\n", .{ code, msg });
+            err.printDiagnostic(code, "Type Error", msg, null);
         }
     }
 

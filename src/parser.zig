@@ -404,7 +404,7 @@ fn errorAt(self: *Parser, token: Token.Token, code: []const u8, msg: []const u8)
             .location = .{ .file = "<source>", .line = token.line, .column = 0 },
         }) catch {};
     } else {
-        std.debug.print("[{s}] Parse Error: {s} [line {d}]\n", .{ code, msg, token.line });
+        err.printDiagnostic(code, "Parse Error", msg, token.line);
     }
     return error.ParseError;
 }

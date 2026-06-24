@@ -86,7 +86,7 @@ pub fn deinit(self: *Compiler) void {
                 .message = msg,
             }) catch {};
         } else {
-            std.debug.print("[{s}] Compile Error: {s}\n", .{ code, msg });
+            err_mod.printDiagnostic(code, "Compile Error", msg, null);
         }
         return error.CompileError;
     }

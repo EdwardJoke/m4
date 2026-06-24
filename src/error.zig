@@ -97,6 +97,9 @@ pub const ErrorInfo = struct {
     description: []const u8,
 };
 
+/// When true, error output includes ANSI color codes for terminal readability.
+pub var pretty: bool = false;
+
 pub const ERROR_DB = [_]ErrorInfo{
     // ── Parse errors (p001–p009) ──────────────────────────────────────
     .{ .code = "p001", .title = "Syntax Error", .description = "The source contains a syntax error — an unexpected token, missing delimiter, or malformed expression." },
@@ -168,4 +171,33 @@ fn lookupError(code: []const u8) ?ErrorInfo {
         if (std.mem.eql(u8, info.code, code)) return info;
     }
     return null;
+}
+
+// ── Pretty-printed error output ───────────────────────────────────
+
+/// Print a formatted diagnostic error to stderr. When pretty mode is enabled,
+/// applies ANSI colors: bold code, colored stage name, dim location.
+pub fn printDiagnostic(code: []const u8, stage: []const u8, msg: []const u8, line: ?u32) void {
+    if (pretty) {
+        const stage_color = if (std.mem.eql(u8, stage, "Parse Error") or
+            std.mem.eql(u8, stage, "Compile Error"))
+            "\x1b[91m" // bright red
+        else if (std.mem.eql(u8, stage, "Type Error"))
+            "\x1b[93m" // bright yellow
+        else
+            "\x1b[91m"; // bright red (runtime)
+        std.debug.print("\x1b[1m[{s}]\x1b[0m {s}{s}\x1b[0m: \x1b[37m{s}\x1b[0m", .{
+            code, stage_color, stage, msg,
+        });
+        if (line) |l| {
+            std.debug.print(" \x1b[2m[line {d}]\x1b[0m", .{l});
+        }
+        std.debug.print("\n", .{});
+    } else {
+        if (line) |l| {
+            std.debug.print("[{s}] {s}: {s} [line {d}]\n", .{ code, stage, msg, l });
+        } else {
+            std.debug.print("[{s}] {s}: {s}\n", .{ code, stage, msg });
+        }
+    }
 }

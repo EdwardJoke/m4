@@ -77,7 +77,7 @@ fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: any
             .message = msg,
         }) catch {};
     } else {
-        std.debug.print("[{s}] Runtime Error: {s}\n", .{ code, msg });
+        err_mod.printDiagnostic(code, "Runtime Error", msg, null);
     }
     return error.RuntimeError;
 }
