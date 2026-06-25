@@ -154,22 +154,57 @@ vgrow(void *vp, ulong len)
 	*(Vec **)vp = v1;
 }
 
+static void
+vgrowcopy(void *vp, ulong len, ulong copy)
+{
+	Vec *v;
+	void *v1;
+
+	v = *(Vec **)vp - 1;
+	assert(v+1 && v->mag == VMag);
+	if (v->cap >= len)
+		return;
+	v1 = vnew(len, v->esz, v->pool);
+	assert(copy <= v->cap);
+	memcpy(v1, v+1, copy * v->esz);
+	vfree(v+1);
+	*(Vec **)vp = v1;
+}
+
 void
 addins(Ins **pvins, uint *pnins, Ins *i)
 {
+	Vec *v;
+	uint nins;
+
 	if (i->op == Onop)
 		return;
-	vgrow(pvins, ++(*pnins));
-	(*pvins)[(*pnins)-1] = *i;
+	nins = *pnins;
+	v = (Vec *)*pvins - 1;
+	assert(v+1 && v->mag == VMag);
+	if (v->cap <= nins)
+		vgrowcopy(pvins, nins+1, nins);
+	(*pvins)[nins] = *i;
+	*pnins = nins + 1;
 }
 
 void
 addbins(Ins **pvins, uint *pnins, Blk *b)
 {
 	Ins *i;
+	uint n, nins;
 
+	n = 0;
 	for (i=b->ins; i<&b->ins[b->nins]; i++)
-		addins(pvins, pnins, i);
+		n += i->op != Onop;
+	if (n == 0)
+		return;
+	nins = *pnins;
+	vgrowcopy(pvins, nins+n, nins);
+	for (i=b->ins; i<&b->ins[b->nins]; i++)
+		if (i->op != Onop)
+			(*pvins)[nins++] = *i;
+	*pnins = nins;
 }
 
 char *

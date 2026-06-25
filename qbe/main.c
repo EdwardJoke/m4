@@ -37,6 +37,10 @@ static Target *tlist[] = {
 };
 static FILE *outf;
 static int dbg;
+static enum {
+	OptFast,
+	OptSmall,
+} opt = OptFast;
 
 static void
 data(Dat *d)
@@ -85,6 +89,17 @@ func(Fn *fn)
 	gcm(fn);
 	filluse(fn);
 	ssacheck(fn);
+	if (opt == OptSmall)
+		for (n=0; n<2; n++) {
+			gvn(fn);
+			fillcfg(fn);
+			simplcfg(fn);
+			filluse(fn);
+			filldom(fn);
+			gcm(fn);
+			filluse(fn);
+			ssacheck(fn);
+		}
 	if (T.cansel) {
 		ifconvert(fn);
 		fillcfg(fn);
@@ -137,8 +152,18 @@ main(int ac, char *av[])
 
 	T = Deftgt;
 	outf = stdout;
-	while ((c = getopt(ac, av, "hd:o:t:")) != -1)
+	while ((c = getopt(ac, av, "hD:d:o:t:")) != -1)
 		switch (c) {
+		case 'D':
+			if (strcmp(optarg, "fast") == 0)
+				opt = OptFast;
+			else if (strcmp(optarg, "small") == 0)
+				opt = OptSmall;
+			else {
+				fprintf(stderr, "unknown optimization mode '%s'\n", optarg);
+				exit(1);
+			}
+			break;
 		case 'd':
 			for (; *optarg; optarg++)
 				if (isalpha(*optarg)) {
@@ -185,6 +210,7 @@ main(int ac, char *av[])
 					fputs(" (default)", hf);
 			}
 			fprintf(hf, "\n");
+			fprintf(hf, "\t%-11s optimizer mode: fast (default), small\n", "-D <mode>");
 			fprintf(hf, "\t%-11s dump debug information\n", "-d <flags>");
 			exit(c != 'h');
 		}
