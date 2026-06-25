@@ -8,6 +8,7 @@ const c = @cImport({
 const VM = @import("../vm.zig");
 const value = @import("../value.zig");
 
+/// Register all fs module native functions (read, write, exists, delete) with the VM.
 pub fn register(vm: *VM) !void {
     try vm.registerNative("fs.read", @constCast(@ptrCast(&fsRead)));
     try vm.registerNative("fs.write", @constCast(@ptrCast(&fsWrite)));
@@ -15,6 +16,7 @@ pub fn register(vm: *VM) !void {
     try vm.registerNative("fs.delete", @constCast(@ptrCast(&fsDelete)));
 }
 
+/// Read the entire contents of a file at the given path. Returns the content as a string, or nil on error.
 fn fsRead(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     const path = switch (args[0]) {
@@ -39,6 +41,7 @@ fn fsRead(vm: *VM, args: []const value.Value) value.Value {
     return .{ .string = buf[0..n] };
 }
 
+/// Write data to a file, overwriting if it exists. Returns true on success, false on error.
 fn fsWrite(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 2) return .{ .bool = false };
     const path = switch (args[0]) {
@@ -58,6 +61,7 @@ fn fsWrite(vm: *VM, args: []const value.Value) value.Value {
     return .{ .bool = n == data.len };
 }
 
+/// Check whether a file exists at the given path. Returns true or false.
 fn fsExists(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .{ .bool = false };
     const path = switch (args[0]) {
@@ -71,6 +75,7 @@ fn fsExists(vm: *VM, args: []const value.Value) value.Value {
     return .{ .bool = rc == 0 };
 }
 
+/// Delete a file from the filesystem. Returns true on success, false on error.
 fn fsDelete(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .{ .bool = false };
     const path = switch (args[0]) {

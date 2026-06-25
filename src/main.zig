@@ -5,6 +5,7 @@ pub fn main(init: std.process.Init) void {
     cli.run(init) catch |err| {
         switch (err) {
             error.InvalidFlag => {},
+            error.ParseError, error.CompileError, error.RuntimeError => {},
             else => std.debug.print("error: {}\n", .{err}),
         }
         std.process.exit(1);

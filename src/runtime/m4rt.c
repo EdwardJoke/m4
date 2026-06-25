@@ -393,11 +393,3 @@ int64_t m4_std_range(int64_t start, int64_t end) {
     }
     return vec;
 }
-
-int64_t m4_io_println(int64_t val) {
-    return m4_std_println(val);
-}
-
-int64_t m4_io_print(int64_t val) {
-    return m4_std_print(val);
-}

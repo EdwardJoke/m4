@@ -2,6 +2,7 @@ const std = @import("std");
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("opcode.zig");
 
+/// Disassemble all instructions in a chunk to stderr, prefixed with the chunk name.
 pub fn disassemble(chunk: *const Chunk, name: []const u8) void {
     std.debug.print("== {s} ==\n", .{name});
 
@@ -11,6 +12,7 @@ pub fn disassemble(chunk: *const Chunk, name: []const u8) void {
     }
 }
 
+/// Disassemble a single instruction at the given offset. Returns the next offset.
 pub fn disassembleInstruction(chunk: *const Chunk, offset: usize) usize {
     std.debug.print("{d:0>4} ", .{offset});
 

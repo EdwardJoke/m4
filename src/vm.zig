@@ -37,6 +37,7 @@ globals: std.StringHashMap(Value.Value),
 diag: ?*err_mod.DiagnosticList = null,
 global_cache: [4]GlobalCache = [_]GlobalCache{.{ .name = "", .value = .nil }} ** 4,
 
+/// Initialize a new VM with the given allocator. All registers default to nil.
 pub fn init(allocator: std.mem.Allocator) VM {
     return .{
         .allocator = allocator,
@@ -49,14 +50,17 @@ pub fn init(allocator: std.mem.Allocator) VM {
     };
 }
 
+/// Deinitialize the VM, freeing the globals hash map.
 pub fn deinit(self: *VM) void {
     self.globals.deinit();
 }
 
+/// Register a native function by name, making it callable from m4 code.
 pub fn registerNative(self: *VM, name: []const u8, ptr: *anyopaque) !void {
     try self.globals.put(name, .{ .@"fn" = ptr });
 }
 
+/// Interpret (execute) a compiled bytecode chunk. Sets up the initial call frame and runs.
 pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     self.chunk = chunk;
     self.pc = 0;
@@ -73,7 +77,7 @@ fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: any
             .message = msg,
         }) catch {};
     } else {
-        std.debug.print("Runtime error [{s}]: {s}\n", .{ code, msg });
+        err_mod.printDiagnostic(code, "Runtime Error", msg, null);
     }
     return error.RuntimeError;
 }
@@ -122,6 +126,7 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
     };
 }
 
+/// Main VM dispatch loop. Executes bytecode instructions until halt or error.
 pub fn run(self: *VM) !void {
     var frame: *CallFrame = &self.frames[0];
     var code: []const u32 = frame.code;
@@ -196,7 +201,7 @@ pub fn run(self: *VM) !void {
                 if (a == .int and b == .int) {
                     self.registers[base + d.a] = .{ .int = a.int + b.int };
                 } else if ((a == .string or a == .string_builder) and (b == .string or b == .string_builder)) {
-                    self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r012", "out of memory", .{});
+                    self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r014", "out of memory", .{});
                 } else {
                     self.registers[base + d.a] = binaryOp(.add, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in + operation", .{});
                 }
@@ -441,7 +446,7 @@ pub fn run(self: *VM) !void {
             .new_vec => {
                 const d = OpCode.decodeABx(inst);
                 const v = try self.allocator.create(VecObj);
-                v.items = std.ArrayList(Value.Value).initCapacity(self.allocator, d.bx) catch return self.runtimeError("r012", "out of memory", .{});
+                v.items = std.ArrayList(Value.Value).initCapacity(self.allocator, d.bx) catch return self.runtimeError("r014", "out of memory", .{});
                 for (0..d.bx) |_| v.items.appendAssumeCapacity(.nil);
                 self.registers[base + d.a] = .{ .vec = v };
                 pc += 1;

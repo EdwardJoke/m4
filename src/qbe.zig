@@ -835,7 +835,6 @@ const Emitter = struct {
         // Map stdlib module names to runtime m4_* prefixed names
         // e.g. "std.println" → "m4_std_println"
         const mapped_name = if (std.mem.startsWith(u8, callee_name, "std.") or
-            std.mem.startsWith(u8, callee_name, "io.") or
             std.mem.startsWith(u8, callee_name, "range."))
         blk: {
             const arena_a = self.str_arena.allocator();

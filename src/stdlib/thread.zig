@@ -2,8 +2,9 @@ const std = @import("std");
 const VM = @import("../vm.zig");
 const value = @import("../value.zig");
 const object = @import("../object.zig");
-const io = @import("io.zig");
+const m4_std = @import("std.zig");
 
+// Channel capacity for message passing between threads.
 const CHANNEL_CAP = 64;
 
 const ThreadHandleObj = struct {
@@ -25,6 +26,7 @@ const SpawnInfo = struct {
     args: [8]value.Value, // fixed-size arg buffer (supports up to 8 args)
 };
 
+/// Register all thread module native functions (spawn, join, channel, send, recv) with the VM.
 pub fn register(vm: *VM) !void {
     try vm.registerNative("thread.spawn", @constCast(@ptrCast(&spawnFn)));
     try vm.registerNative("thread.join", @constCast(@ptrCast(&joinFn)));
@@ -33,6 +35,7 @@ pub fn register(vm: *VM) !void {
     try vm.registerNative("thread.recv", @constCast(@ptrCast(&recvFn)));
 }
 
+/// Spawn a function in a new thread with up to 8 arguments. Returns a handle (vec) for thread.join.
 fn spawnFn(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     if (args[0] != .fun_obj) return .nil;
@@ -68,6 +71,7 @@ fn spawnFn(vm: *VM, args: []const value.Value) value.Value {
     return .{ .vec = @ptrCast(handle) };
 }
 
+/// Entry point for a spawned thread. Runs the function with its arguments and stores the result.
 fn threadEntry(info: *SpawnInfo) void {
     const fun: *object.FunObj = @ptrCast(@alignCast(info.fun_ptr));
 
@@ -78,7 +82,7 @@ fn threadEntry(info: *SpawnInfo) void {
     var child_vm = VM.init(allocator);
     defer child_vm.deinit();
 
-    io.register(&child_vm) catch {};
+    m4_std.register(&child_vm) catch {};
     register(&child_vm) catch {};
 
     // Copy arguments into registers 0..arg_count
@@ -106,6 +110,7 @@ fn threadEntry(info: *SpawnInfo) void {
     std.heap.page_allocator.destroy(info);
 }
 
+/// Join a spawned thread and return its result. Blocks until the thread completes.
 fn joinFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     if (args[0] != .vec) return .nil;
@@ -115,6 +120,7 @@ fn joinFn(_: *VM, args: []const value.Value) value.Value {
     return handle.result;
 }
 
+/// Create a new channel for inter-thread message passing (capacity: 64).
 fn channelFn(vm: *VM, _: []const value.Value) value.Value {
     const ch = vm.allocator.create(ChannelObj) catch return .nil;
     ch.* = .{
@@ -126,6 +132,7 @@ fn channelFn(vm: *VM, _: []const value.Value) value.Value {
     return .{ .vec = @ptrCast(ch) };
 }
 
+/// Send a value into a channel. Blocks if full. Returns true on success, false if closed.
 fn sendFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 2) return .{ .bool = false };
     if (args[0] != .vec) return .{ .bool = false };
@@ -151,6 +158,7 @@ fn sendFn(_: *VM, args: []const value.Value) value.Value {
     }
 }
 
+/// Receive a value from a channel. Blocks if empty. Returns nil if channel is closed and empty.
 fn recvFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     if (args[0] != .vec) return .nil;

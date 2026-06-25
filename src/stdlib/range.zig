@@ -6,10 +6,12 @@ const VecObj = struct {
     items: std.ArrayList(value.Value),
 };
 
+/// Register the range.range native function with the VM.
 pub fn register(vm: *VM) !void {
     try vm.registerNative("range.range", @constCast(@ptrCast(&range)));
 }
 
+/// Generate a vec of integers from start (inclusive) to end (exclusive). Returns nil on bad args.
 fn range(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 2) return .nil;
 

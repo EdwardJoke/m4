@@ -7,6 +7,7 @@ const VecObj = struct {
     items: zig_std.ArrayList(value.Value),
 };
 
+/// Register all std module native functions (println, print, readln, read, readChar, range) with the VM.
 pub fn register(vm: *VM) !void {
     try vm.registerNative("std.println", @constCast(@ptrCast(&println)));
     try vm.registerNative("std.print", @constCast(@ptrCast(&print)));
@@ -16,17 +17,20 @@ pub fn register(vm: *VM) !void {
     try vm.registerNative("std.range", @constCast(@ptrCast(&range)));
 }
 
+/// Print each argument to stdout followed by a newline. Returns nil.
 fn println(_: *VM, args: []const value.Value) value.Value {
     for (args) |arg| writeValue(arg);
     zig_std.debug.print("\n", .{});
     return .nil;
 }
 
+/// Print each argument to stdout without a trailing newline. Returns nil.
 fn print(_: *VM, args: []const value.Value) value.Value {
     for (args) |arg| writeValue(arg);
     return .nil;
 }
 
+/// Read a single line from stdin (up to newline). Returns the line as a string, or nil on error.
 fn readln(vm: *VM, _: []const value.Value) value.Value {
     var buf = zig_std.ArrayList(u8).empty;
     var byte: [1]u8 = undefined;
@@ -45,6 +49,7 @@ fn readln(vm: *VM, _: []const value.Value) value.Value {
     return .{ .string = buf.items };
 }
 
+/// Read all remaining data from stdin until EOF. Returns the data as a string, or nil on error.
 fn readAll(vm: *VM, _: []const value.Value) value.Value {
     var buf = zig_std.ArrayList(u8).empty;
     var chunk: [4096]u8 = undefined;
@@ -62,6 +67,7 @@ fn readAll(vm: *VM, _: []const value.Value) value.Value {
     return .{ .string = buf.items };
 }
 
+/// Read a single UTF-8 character from stdin. Returns the character, or 0 on EOF.
 fn readChar(_: *VM, _: []const value.Value) value.Value {
     var buf: [4]u8 = [_]u8{0} ** 4;
     const n = posix.read(posix.STDIN_FILENO, buf[0..1]) catch |err| {
@@ -87,6 +93,7 @@ fn readChar(_: *VM, _: []const value.Value) value.Value {
     return .{ .char = cp };
 }
 
+/// Generate a vec of integers from start (inclusive) to end (exclusive). Returns nil on bad args.
 fn range(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 2) return .nil;
 

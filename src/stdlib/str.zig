@@ -2,11 +2,13 @@ const zig_std = @import("std");
 const VM = @import("../vm.zig");
 const value = @import("../value.zig");
 
+/// Register all str module native functions (len, slice) with the VM.
 pub fn register(vm: *VM) !void {
     try vm.registerNative("str.len", @constCast(@ptrCast(&strLen)));
     try vm.registerNative("str.slice", @constCast(@ptrCast(&strSlice)));
 }
 
+/// Return the byte length of a string. Returns 0 for non-string arguments.
 fn strLen(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .{ .int = 0 };
     const len: i64 = switch (args[0]) {
@@ -16,6 +18,7 @@ fn strLen(_: *VM, args: []const value.Value) value.Value {
     return .{ .int = len };
 }
 
+/// Extract a substring via byte-level slicing (start inclusive, end exclusive). Returns nil on out-of-bounds or bad args.
 fn strSlice(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 3) return .nil;
     const s = switch (args[0]) {

@@ -28,6 +28,7 @@ const Flags = struct {
     explain_code: ?[]const u8 = null,
     help_mode: bool = false,
     version_mode: bool = false,
+    pretty_mode: bool = false,
 };
 
 // ── Structured help metadata (re-exported from cli_info.zig) ──────
@@ -38,12 +39,17 @@ pub const UsageMode = cli_info.UsageMode;
 pub const HelpInfo = cli_info.HelpInfo;
 pub const VersionInfo = cli_info.VersionInfo;
 
+/// Main CLI entry point. Parses flags, dispatches to subcommands (help, version, lint, build, explain),
+/// or runs/executes m4 source files. Launches REPL if no file is provided.
 pub fn run(init: std.process.Init) !void {
     const arena_alloc = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena_alloc);
 
     const flags = try parseFlags(args);
     if (flags.should_exit) return;
+
+    // Enable pretty output if requested
+    m4.err.pretty = flags.pretty_mode;
 
     if (flags.help_mode) {
         try runHelp(arena_alloc, flags.output_format);
@@ -158,6 +164,10 @@ fn parseFlags(args: []const []const u8) !Flags {
         }
         if (std.mem.eql(u8, arg, "--debug") or std.mem.eql(u8, arg, "-d")) {
             flags.debug_mode = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--pretty") or std.mem.eql(u8, arg, "-p")) {
+            flags.pretty_mode = true;
             continue;
         }
         // 'lint' subcommand — parse and type-check only
@@ -286,10 +296,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.ParseError;
         }
-        std.debug.print("Parse error: {}\n", .{err});
-        return;
+        m4.err.printDiagnostic("p001", "Parse Error", @errorName(err), null);
+        return error.ParseError;
     };
 
     // Type checking
@@ -332,10 +342,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.CompileError;
         }
-        std.debug.print("Compile error: {}\n", .{err});
-        return;
+        m4.err.printDiagnostic("c001", "Compile Error", "out of memory", null);
+        return error.CompileError;
     };
 
     if (flags.debug_mode) {
@@ -350,10 +360,10 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.RuntimeError;
         }
-        std.debug.print("Runtime error: {}\n", .{err});
-        return;
+        m4.err.printDiagnostic("r011", "Runtime Error", "unexpected error", null);
+        return error.RuntimeError;
     };
 }
 
@@ -362,9 +372,7 @@ fn resolveUses(vm: *VM, arena: *m4.ast.NodeArena, stmts: []const usize) !void {
         const node = arena.get(stmt_idx);
         if (node == .use_stmt) {
             const path = node.use_stmt.path;
-            if (std.mem.eql(u8, path, "io")) {
-                try m4.stdlib.io.register(vm);
-            } else if (std.mem.eql(u8, path, "std")) {
+            if (std.mem.eql(u8, path, "std")) {
                 try m4.stdlib.std.register(vm);
             } else if (std.mem.eql(u8, path, "thread")) {
                 try m4.stdlib.thread.register(vm);
@@ -407,18 +415,18 @@ fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Fl
                 defer allocator.free(out);
                 std.debug.print("{s}\n", .{out});
             }
-            return;
+            return error.ParseError;
         }
-        std.debug.print("Parse error: {}\n", .{err});
-        return;
+        m4.err.printDiagnostic("p001", "Parse Error", @errorName(err), null);
+        return error.ParseError;
     };
 
     var checker = m4.type_check.Checker.init(allocator, &parser.arena);
     defer checker.deinit();
     if (flags.error_format != null) checker.diag = &diag_list;
-    checker.check(stmts) catch |err| {
-        std.debug.print("Type check error: {}\n", .{err});
-        return;
+    checker.check(stmts) catch {
+        m4.err.printDiagnostic("t001", "Type Error", "internal checker error", null);
+        return error.ParseError;
     };
     if (checker.error_count > 0) {
         if (flags.error_format) |fmt| {
@@ -428,6 +436,7 @@ fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Fl
         } else {
             std.debug.print("{d} type error(s) found.\n", .{checker.error_count});
         }
+        return error.ParseError;
     } else {
         std.debug.print("Type checking passed.\n", .{});
     }
@@ -606,6 +615,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
         .flags = &.{
             FlagInfo{ .name = "--debug", .short = "-d", .description = "Show bytecode before execution" },
             FlagInfo{ .name = "--format", .short = "-f", .description = "Format source code and print" },
+            FlagInfo{ .name = "--pretty", .short = "-p", .description = "Colored error output for terminal readability" },
             FlagInfo{ .name = "--native", .description = "Emit QBE IR instead of running via bytecode VM" },
             FlagInfo{ .name = "--zon", .description = "Structured error output in ZON format" },
             FlagInfo{ .name = "--json", .description = "Structured error output in JSON format" },
@@ -643,7 +653,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         while (true) {
             const n = posix.read(posix.STDIN_FILENO, &byte) catch |err| {
                 if (err == error.WouldBlock) continue;
-                std.debug.print("Input error: {}\n", .{err});
+                m4.err.printDiagnostic("r016", "I/O Error", "stdin read failed", null);
                 return;
             };
             if (n == 0) return; // EOF
@@ -667,7 +677,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         defer parser.deinit();
 
         const stmts = parser.parse() catch |err| {
-            if (err != error.ParseError) std.debug.print("Parse error: {}\n", .{err});
+            if (err != error.ParseError) m4.err.printDiagnostic("p001", "Parse Error", "unexpected error", null);
             continue;
         };
 
@@ -675,7 +685,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         defer compiler.deinit();
 
         compiler.compile(stmts) catch |err| {
-            if (err != error.CompileError) std.debug.print("Compile error: {}\n", .{err});
+            if (err != error.CompileError) m4.err.printDiagnostic("c001", "Compile Error", "unexpected error", null);
             continue;
         };
 
@@ -686,7 +696,7 @@ fn runRepl(arena: std.mem.Allocator) !void {
         try resolveUses(&vm, &parser.arena, stmts);
 
         vm.interpret(&compiler.chunk) catch |err| {
-            if (err != error.RuntimeError) std.debug.print("Runtime error: {}\n", .{err});
+            if (err != error.RuntimeError) m4.err.printDiagnostic("r011", "Runtime Error", "unexpected error", null);
             continue;
         };
     }
@@ -706,7 +716,7 @@ fn wrapReplInput(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
         }
     }
 
-    // Don't wrap function calls like io.println(...) or foo(...)
+    // Don't wrap function calls like std.println(...) or foo(...)
     if (looksLikeCall(input)) return input;
 
     const wrapped = try allocator.alloc(u8, "std.println(".len + input.len + ")".len);
@@ -752,8 +762,18 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
 
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(io, path, allocator, std.Io.Limit.limited(1024 * 1024)) catch |err| {
-        std.debug.print("m4: cannot read '{s}': {}\n", .{ path, err });
-        return err;
+        const clean_msg: []const u8 = switch (err) {
+            error.FileNotFound => "file not found",
+            error.AccessDenied => "permission denied",
+            error.IsDir => "is a directory",
+            else => @errorName(err),
+        };
+        if (m4.err.pretty) {
+            std.debug.print("\x1b[1mm4:\x1b[0m \x1b[91merror:\x1b[0m cannot read '{s}': \x1b[37m{s}\x1b[0m\n", .{ path, clean_msg });
+        } else {
+            std.debug.print("m4: error: cannot read '{s}': {s}\n", .{ path, clean_msg });
+        }
+        return error.ParseError;
     };
 }
 
@@ -795,6 +815,7 @@ fn printHelp() void {
         \\Flags:
         \\  -d, --debug                    Show bytecode before execution
         \\  -f, --format                   Format source code and print
+        \\  -p, --pretty                   Colored error output for terminal readability
         \\  --native                       Emit QBE IR instead of running via bytecode VM
         \\  --zon, --json, --yaml           Structured error output format
         \\

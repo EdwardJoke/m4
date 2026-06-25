@@ -16,6 +16,8 @@ m4 is a minimal scripting language implemented in Zig, featuring a hand-written 
 - **15 keywords only** — minimal grammar, minimal syntax entropy
 - **Result-based error handling** — `res[T E]` type with `?` propagation operator
 - **Structured error output** — diagnostics in ZON, JSON, or YAML formats
+- **32 error codes** — human-readable diagnostics with `m4 explain <code>`
+- **Colored error output** — `--pretty` flag for terminal-friendly colored diagnostics
 
 ## Quick Start
 
@@ -41,7 +43,7 @@ zig build run
 zig build run -- hello.m4
 
 # Run from stdin
-echo 'io.println(42)' | zig build run -- -
+echo 'std.println(42)' | zig build run -- -
 
 # Or build and use the binary directly
 zig build
@@ -51,7 +53,7 @@ zig build
 ## CLI
 
 ```
-m4 v0.2.2 — statically typed, AI-native scripting language
+m4 v0.3.0 — statically typed, AI-native scripting language
 
 Usage:
   m4 [flags] <file.m4>          Run file
@@ -70,6 +72,7 @@ Use 'm4 <command> help' for command-specific help (e.g. 'm4 lint help --zon').
 Flags:
   -d, --debug                    Show bytecode before execution
   -f, --format                   Format source code and print
+  -p, --pretty                   Colored error output for terminal readability
   --native                       Emit QBE IR instead of running via bytecode VM
   --zon, --json, --yaml           Structured error output format
 
@@ -102,14 +105,14 @@ Flags:
 ### Example Program
 
 ```m4
-use io
+use std
 
 type User
     name str
     age  i32
 
 fun greet(u User)
-    io.println("hello " + u.name)
+    std.println("hello " + u.name)
 
 pub fun main()
     let user User = User(
@@ -120,7 +123,7 @@ pub fun main()
     greet(user)
 
     for n in [1, 2, 3]
-        io.println(n)
+        std.println(n)
 ```
 
 ### Variables
@@ -167,6 +170,7 @@ for item in items
 src/
 ├── main.zig          — Entry point
 ├── cli.zig           — CLI flag parsing, REPL, file execution
+├── cli_info.zig      — CLI help/version metadata types
 ├── scanner.zig       — Hand-written lexer with indentation tracking
 ├── token.zig         — Token types and keyword definitions
 ├── ast.zig           — AST node definitions and arena allocator
@@ -183,25 +187,24 @@ src/
 ├── debug.zig         — Bytecode disassembler
 ├── error.zig         — Structured diagnostic system (ZON/JSON/YAML)
 ├── root.zig          — Module root re-exporting public declarations
-    ├── qbe.zig          — QBE IR emitter for native compilation
-    ├── qbe_build.zig    — QBE native binary build pipeline
-    ├── runtime/
-    │   ├── m4rt.c       — Minimal C runtime for native-compiled programs
-    │   ├── m4rt.h       — Runtime header with type definitions
-    │   ├── qbe_wrap.c   — QBE C API wrapper
-    │   └── qbe_wrap.h   — QBE wrapper header
-    └── stdlib/
-        ├── io.zig       — Standard I/O (print, println, readln, read, readChar)
-        ├── std.zig      — Core stdlib (println, print, readln, read, range)
-        ├── thread.zig   — Threading primitives (spawn, join, channel, send, recv)
-        ├── range.zig    — Numeric range generator
-        ├── fs.zig       — File system (read, write, exists, delete)
-        └── str.zig      — String utilities (len, slice)
+├── qbe.zig           — QBE IR emitter for native compilation
+├── qbe_build.zig     — QBE native binary build pipeline
+├── runtime/
+│   ├── m4rt.c       — Minimal C runtime for native-compiled programs
+│   ├── m4rt.h       — Runtime header with type definitions
+│   ├── qbe_wrap.c   — QBE C API wrapper
+│   └── qbe_wrap.h   — QBE wrapper header
+└── stdlib/
+    ├── std.zig      — Core stdlib (println, print, readln, read, readChar, range)
+    ├── thread.zig   — Threading primitives (spawn, join, channel, send, recv)
+    ├── range.zig    — Numeric range generator
+    ├── fs.zig       — File system (read, write, exists, delete)
+    └── str.zig      — String utilities (len, slice)
 ```
 
 ## Status
 
-m4 is in **early development** (v0.2.2). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
+m4 is in **early development** (v0.3.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
@@ -211,8 +214,7 @@ m4 is in **early development** (v0.2.2). The core pipeline (scan → parse → t
 - Loops (`loop`, `for`), loop control (`continue`, `esc`)
 - String concat, comparison, indexing, length
 - Arithmetic, comparison, logical operators
-- `io.println` / `io.print` / `io.readln` / `io.read` / `io.readChar`
-- `std.println` / `std.print` / `std.readln` / `std.read` / `std.range`
+- `std.println` / `std.print` / `std.readln` / `std.read` / `std.readChar` / `std.range`
 - `thread.spawn` / `thread.join` / channels
 - `range.range` — numeric range generator
 - `fs.read` / `fs.write` / `fs.exists` / `fs.delete` — file system
@@ -223,14 +225,18 @@ m4 is in **early development** (v0.2.2). The core pipeline (scan → parse → t
 - Canonical formatter
 - Bytecode disassembler
 - Structured diagnostics (ZON, JSON, YAML)
-- Error code explainer (`m4 explain r001`)
+- 32 error codes with `m4 explain <code>`
+- Colored error output (`--pretty` / `-p`)
+- Docstrings on all public Zig API functions
 - QBE backend: IR emitter and native binary pipeline (in development)
 - Benchmarks vs Python/TypeScript
 
 ### Not Yet Implemented
 - Full standard library (`net`, `json`, `time`, etc.)
 - Result type runtime support
-- Modules beyond `std` / `io` / `thread` / `range` / `fs` / `str`
+- Modules beyond `std` / `thread` / `range` / `fs` / `str`
+- Source locations for type errors
+- Auto-register `std` module in stdin/file mode
 - Cranelift JIT backend
 - Ownership-lite memory model
 - Package manager

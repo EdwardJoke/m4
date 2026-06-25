@@ -111,10 +111,12 @@ pub const Node = union(enum) {
     vec_lit: []const usize,
 };
 
+/// Arena allocator for AST nodes. Stores nodes in a flat array indexed by usize.
 pub const NodeArena = struct {
     allocator: std.mem.Allocator,
     nodes: std.ArrayList(Node),
 
+    /// Initialize a new node arena with the given allocator.
     pub fn init(allocator: std.mem.Allocator) NodeArena {
         return .{
             .allocator = allocator,
@@ -122,16 +124,19 @@ pub const NodeArena = struct {
         };
     }
 
+    /// Deinitialize the node arena, freeing all owned memory.
     pub fn deinit(self: *NodeArena) void {
         self.nodes.deinit(self.allocator);
     }
 
+    /// Append a node to the arena and return its index.
     pub fn add(self: *NodeArena, node: Node) !usize {
         const idx = self.nodes.items.len;
         try self.nodes.append(self.allocator, node);
         return idx;
     }
 
+    /// Retrieve a node by its arena index.
     pub fn get(self: *const NodeArena, idx: usize) Node {
         return self.nodes.items[idx];
     }

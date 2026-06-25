@@ -39,6 +39,7 @@ previous: Token.Token,
 had_error: bool,
 diag: ?*err.DiagnosticList = null,
 
+/// Initialize a new parser for the given source string. Automatically advances to the first token.
 pub fn init(allocator: std.mem.Allocator, source: []const u8) Parser {
     var p = Parser{
         .allocator = allocator,
@@ -52,11 +53,13 @@ pub fn init(allocator: std.mem.Allocator, source: []const u8) Parser {
     return p;
 }
 
+/// Deinitialize the parser, freeing the scanner and AST arena.
 pub fn deinit(self: *Parser) void {
     self.scanner.deinit();
     self.arena.deinit();
 }
 
+/// Parse the entire source into a list of AST statement indices. Returns ParseError on syntax errors.
 pub fn parse(self: *Parser) ![]const usize {
     var stmts = std.ArrayList(usize).empty;
     self.skipNewlines();
@@ -93,7 +96,7 @@ fn declaration(self: *Parser) Error!?usize {
 /// let x i32 = 10  or  mut x i32 = 0
 fn letDecl(self: *Parser, mutable: bool) !usize {
     self.advanceRaw(); // consume let/mut
-    const name = try self.consumeIdent("Expected variable name");
+    const name = try self.consumeIdent("p001", "Expected variable name");
 
     var type_annot: ?usize = null;
     if (!self.check(.eq) and !self.check(.newline) and !self.check(.eof)) {
@@ -117,13 +120,13 @@ fn letDecl(self: *Parser, mutable: bool) !usize {
 /// fun name(params) retType  or  pub fun name(params) retType
 fn funDecl(self: *Parser, public: bool) !usize {
     self.advanceRaw(); // consume fun
-    const name = try self.consumeIdent("Expected function name");
+    const name = try self.consumeIdent("p001", "Expected function name");
 
-    try self.consume(.lparen, "Expected '('");
+    try self.consume(.lparen, "p001", "Expected '('");
     var params = std.ArrayList(ast.Param).empty;
     if (!self.check(.rparen)) {
         while (true) {
-            const pname = try self.consumeIdent("Expected parameter name");
+            const pname = try self.consumeIdent("p001", "Expected parameter name");
             var ptype: ?usize = null;
             if (!self.check(.comma) and !self.check(.rparen)) {
                 ptype = try self.parsePrecedence(.primary);
@@ -133,7 +136,7 @@ fn funDecl(self: *Parser, public: bool) !usize {
             self.advanceRaw(); // consume comma
         }
     }
-    try self.consume(.rparen, "Expected ')'");
+    try self.consume(.rparen, "p001", "Expected ')'");
 
     var ret_type: ?usize = null;
     if (!self.check(.newline) and !self.check(.indent)) {
@@ -162,20 +165,20 @@ fn pubDecl(self: *Parser) !usize {
 /// type Name / field1 type1 / field2 type2
 fn typeDecl(self: *Parser) !usize {
     self.advanceRaw(); // consume type
-    const name = try self.consumeIdent("Expected type name");
+    const name = try self.consumeIdent("p001", "Expected type name");
 
     // NEWLINE may have been consumed by consumeIdent's advanceRaw
     if (self.check(.newline)) self.advanceRaw();
-    try self.consume(.indent, "Expected indented block for type fields");
+    try self.consume(.indent, "p001", "Expected indented block for type fields");
 
     var fields = std.ArrayList(ast.Field).empty;
     while (!self.check(.dedent) and !self.check(.eof)) {
-        const fname = try self.consumeIdent("Expected field name");
+        const fname = try self.consumeIdent("p001", "Expected field name");
         const ftype = try self.parsePrecedence(.primary);
         try fields.append(self.allocator, .{ .name = fname, .type_annot = ftype });
         self.skipNewlines();
     }
-    try self.consume(.dedent, "Expected dedent after type body");
+    try self.consume(.dedent, "p001", "Expected dedent after type body");
 
     return self.arena.add(.{ .type_decl = .{
         .name = name,
@@ -186,7 +189,7 @@ fn typeDecl(self: *Parser) !usize {
 /// use module_name
 fn useDecl(self: *Parser) !usize {
     self.advanceRaw(); // consume use
-    const path = try self.consumeIdent("Expected module name");
+    const path = try self.consumeIdent("p001", "Expected module name");
     return self.arena.add(.{ .use_stmt = .{ .path = path } });
 }
 
@@ -249,10 +252,10 @@ fn loopStmt(self: *Parser) !usize {
 /// for var in iterable / body
 fn forStmt(self: *Parser) !usize {
     self.advanceRaw(); // consume for
-    const var_name = try self.consumeIdent("Expected loop variable");
+    const var_name = try self.consumeIdent("p001", "Expected loop variable");
 
     // consume 'in' (parsed as an identifier token)
-    const in_tok = try self.consumeIdent("Expected 'in'");
+    const in_tok = try self.consumeIdent("p001", "Expected 'in'");
     if (!std.mem.eql(u8, in_tok, "in")) {
         return self.reportError(self.previous.line, "expected 'in', got '{s}'", .{in_tok});
     }
@@ -320,7 +323,7 @@ fn block(self: *Parser) Error!usize {
             }
             self.skipNewlines();
         }
-        try self.consume(.dedent, "Expected dedent");
+        try self.consume(.dedent, "p001", "Expected dedent");
         return self.arena.add(.{ .block = try stmts.toOwnedSlice(self.allocator) });
     }
     return self.reportError(self.previous.line, "expected indented block", .{});
@@ -380,42 +383,46 @@ fn check(self: *Parser, tag: Token.Tag) bool {
     return self.current.tag == tag;
 }
 
-fn consume(self: *Parser, tag: Token.Tag, msg: []const u8) !void {
+fn consume(self: *Parser, tag: Token.Tag, code: []const u8, msg: []const u8) !void {
     if (self.current.tag == tag) return self.advanceRaw();
-    return self.errorAtCurrent(msg);
+    // Detect unexpected EOF — use p002 regardless of expected code
+    const actual_code = if (self.current.tag == .eof) "p002" else code;
+    return self.errorAtCurrent(actual_code, msg);
 }
 
-fn errorAtCurrent(self: *Parser, msg: []const u8) error{ParseError} {
-    return self.errorAt(self.current, msg);
+fn errorAtCurrent(self: *Parser, code: []const u8, msg: []const u8) error{ParseError} {
+    return self.errorAt(self.current, code, msg);
 }
 
-fn errorAt(self: *Parser, token: Token.Token, msg: []const u8) error{ParseError} {
+fn errorAt(self: *Parser, token: Token.Token, code: []const u8, msg: []const u8) error{ParseError} {
     self.had_error = true;
     if (self.diag) |diag| {
         diag.add(self.allocator, .{
             .severity = .@"error",
-            .code = "p001",
+            .code = code,
             .message = msg,
             .location = .{ .file = "<source>", .line = token.line, .column = 0 },
         }) catch {};
     } else {
-        std.debug.print("[line {d}] Parse error: {s}\n", .{ token.line, msg });
+        err.printDiagnostic(code, "Parse Error", msg, token.line);
     }
     return error.ParseError;
 }
 
 fn reportError(self: *Parser, line: u32, comptime fmt: []const u8, args: anytype) error{ParseError} {
     const msg = std.fmt.allocPrint(self.allocator, fmt, args) catch "parse error";
-    return self.errorAt(.{ .tag = .err, .start = "", .line = line }, msg);
+    return self.errorAt(.{ .tag = .err, .start = "", .line = line }, "p001", msg);
 }
 
-fn consumeIdent(self: *Parser, msg: []const u8) ![]const u8 {
+fn consumeIdent(self: *Parser, code: []const u8, msg: []const u8) ![]const u8 {
     if (self.current.tag == .ident) {
         const name = self.current.start;
         self.advanceRaw();
         return name;
     }
-    return self.errorAtCurrent(msg);
+    // Detect unexpected EOF — use p002 regardless of expected code
+    const actual_code = if (self.current.tag == .eof) "p002" else code;
+    return self.errorAtCurrent(actual_code, msg);
 }
 
 fn getRule(tag: Token.Tag) ParseRule {
@@ -457,12 +464,12 @@ fn number(self: *Parser) !usize {
     const lexeme = self.previous.start;
     if (self.previous.tag == .int_literal) {
         const val = std.fmt.parseInt(i64, lexeme, 10) catch {
-            return self.errorAt(self.previous, "Invalid integer literal");
+            return self.errorAt(self.previous, "p004", "Invalid integer literal");
         };
         return self.arena.add(.{ .int_lit = val });
     } else {
         const val = std.fmt.parseFloat(f64, lexeme) catch {
-            return self.errorAt(self.previous, "Invalid float literal");
+            return self.errorAt(self.previous, "p004", "Invalid float literal");
         };
         return self.arena.add(.{ .float_lit = val });
     }
@@ -488,7 +495,7 @@ fn variable(self: *Parser) !usize {
 
 fn grouping(self: *Parser) !usize {
     const expr = try self.expression();
-    try self.consume(.rparen, "Expected ')'");
+    try self.consume(.rparen, "p001", "Expected ')'");
     return expr;
 }
 
@@ -501,7 +508,7 @@ fn vecLiteral(self: *Parser) !usize {
             self.advanceRaw(); // consume comma
         }
     }
-    try self.consume(.rbracket, "Expected ']'");
+    try self.consume(.rbracket, "p001", "Expected ']'");
     return self.arena.add(.{ .vec_lit = try items.toOwnedSlice(self.allocator) });
 }
 
@@ -556,7 +563,7 @@ fn callExpr(self: *Parser, callee: usize) !usize {
             self.advanceRaw();
         }
     }
-    try self.consume(.rparen, "Expected ')'");
+    try self.consume(.rparen, "p001", "Expected ')'");
     return self.arena.add(.{ .call = .{ .callee = callee, .args = try args.toOwnedSlice(self.allocator) } });
 }
 
@@ -587,8 +594,8 @@ fn structLiteral(self: *Parser, type_node: usize) !usize {
             // Skip newlines, indents, and dedents between fields
             self.skipNewlinesAndIndent();
             if (self.check(.rparen)) break;
-            const fname = try self.consumeIdent("Expected field name");
-            try self.consume(.colon, "Expected ':'");
+            const fname = try self.consumeIdent("p001", "Expected field name");
+            try self.consume(.colon, "p001", "Expected ':'");
             const val = try self.expression();
             try fields.append(self.allocator, .{ .name = fname, .value = val });
             // After the field, check for end or more fields
@@ -598,19 +605,19 @@ fn structLiteral(self: *Parser, type_node: usize) !usize {
         }
     }
     self.skipNewlinesAndIndent();
-    try self.consume(.rparen, "Expected ')'");
+    try self.consume(.rparen, "p001", "Expected ')'");
     return self.arena.add(.{ .struct_lit = .{ .type_name = type_name, .fields = try fields.toOwnedSlice(self.allocator) } });
 }
 
 fn dotExpr(self: *Parser, left: usize) !usize {
     // self.current is already the token after the dot (set by the Pratt loop's advanceRaw)
-    const field = try self.consumeIdent("Expected field name");
+    const field = try self.consumeIdent("p001", "Expected field name");
     return self.arena.add(.{ .field = .{ .object = left, .field_name = field } });
 }
 
 fn indexExpr(self: *Parser, left: usize) !usize {
     const idx = try self.expression();
-    try self.consume(.rbracket, "Expected ']'");
+    try self.consume(.rbracket, "p001", "Expected ']'");
     return self.arena.add(.{ .index = .{ .object = left, .idx = idx } });
 }
 

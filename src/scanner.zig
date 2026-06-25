@@ -12,6 +12,7 @@ indent_stack: std.ArrayList(u32),
 pending_tokens: std.ArrayList(Token.Token),
 in_line: bool,
 
+/// Initialize a new scanner for the given source string.
 pub fn init(allocator: std.mem.Allocator, source: []const u8) Scanner {
     var stack = std.ArrayList(u32).empty;
     stack.append(allocator, 0) catch @panic("OOM");
@@ -27,11 +28,13 @@ pub fn init(allocator: std.mem.Allocator, source: []const u8) Scanner {
     };
 }
 
+/// Deinitialize the scanner, freeing the indent stack and pending tokens.
 pub fn deinit(self: *Scanner) void {
     self.indent_stack.deinit(self.allocator);
     self.pending_tokens.deinit(self.allocator);
 }
 
+/// Return the next token from the source. Handles indentation tracking, comments, and errors.
 pub fn nextToken(self: *Scanner) Token.Token {
     if (self.pending_tokens.items.len > 0) {
         const tok = self.pending_tokens.orderedRemove(0);
