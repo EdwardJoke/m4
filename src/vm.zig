@@ -199,7 +199,9 @@ pub fn run(self: *VM) !void {
                 const a = self.registers[base + d.b];
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
-                    self.registers[base + d.a] = .{ .int = a.int + b.int };
+                    const ov = @addWithOverflow(a.int, b.int);
+                    if (ov[1] != 0) return self.runtimeError("r017", "integer overflow in + operation", .{});
+                    self.registers[base + d.a] = .{ .int = ov[0] };
                 } else if ((a == .string or a == .string_builder) and (b == .string or b == .string_builder)) {
                     self.registers[base + d.a] = concatStrings(self.allocator, a, b) catch return self.runtimeError("r014", "out of memory", .{});
                 } else {
@@ -212,7 +214,9 @@ pub fn run(self: *VM) !void {
                 const a = self.registers[base + d.b];
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
-                    self.registers[base + d.a] = .{ .int = a.int - b.int };
+                    const ov = @subWithOverflow(a.int, b.int);
+                    if (ov[1] != 0) return self.runtimeError("r017", "integer overflow in - operation", .{});
+                    self.registers[base + d.a] = .{ .int = ov[0] };
                 } else {
                     self.registers[base + d.a] = binaryOp(.sub, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in - operation", .{});
                 }
@@ -223,7 +227,9 @@ pub fn run(self: *VM) !void {
                 const a = self.registers[base + d.b];
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
-                    self.registers[base + d.a] = .{ .int = a.int * b.int };
+                    const ov = @mulWithOverflow(a.int, b.int);
+                    if (ov[1] != 0) return self.runtimeError("r017", "integer overflow in * operation", .{});
+                    self.registers[base + d.a] = .{ .int = ov[0] };
                 } else {
                     self.registers[base + d.a] = binaryOp(.mul, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in * operation", .{});
                 }
@@ -235,6 +241,7 @@ pub fn run(self: *VM) !void {
                 const b = self.registers[base + d.c];
                 if (a == .int and b == .int) {
                     if (b.int == 0) return self.runtimeError("r012", "division by zero", .{});
+                    if (a.int == std.math.minInt(i64) and b.int == -1) return self.runtimeError("r017", "integer overflow in / operation", .{});
                     self.registers[base + d.a] = .{ .int = @divTrunc(a.int, b.int) };
                 } else {
                     self.registers[base + d.a] = binaryOp(.div_op, a, b, self.allocator) catch return self.runtimeError("r002", "type mismatch in / operation", .{});
@@ -258,7 +265,10 @@ pub fn run(self: *VM) !void {
                 const r = base + OpCode.decodeAx(inst);
                 const v = self.registers[r];
                 self.registers[r] = switch (v) {
-                    .int => |i| .{ .int = -i },
+                    .int => |i| blk: {
+                        if (i == std.math.minInt(i64)) return self.runtimeError("r017", "integer overflow in negation", .{});
+                        break :blk .{ .int = -i };
+                    },
                     .float => |f| .{ .float = -f },
                     else => return self.runtimeError("r004", "cannot negate non-numeric value", .{}),
                 };
@@ -596,7 +606,11 @@ fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value, allocator: std.me
     return switch (op) {
         .add => switch (a) {
             .int => |ai| switch (b) {
-                .int => |bi| .{ .int = ai + bi },
+                .int => |bi| {
+                    const ov = @addWithOverflow(ai, bi);
+                    if (ov[1] != 0) return error.RuntimeError;
+                    return .{ .int = ov[0] };
+                },
                 .float => |bf| .{ .float = @as(f64, @floatFromInt(ai)) + bf },
                 else => error.RuntimeError,
             },
@@ -609,7 +623,11 @@ fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value, allocator: std.me
         },
         .sub => switch (a) {
             .int => |ai| switch (b) {
-                .int => |bi| .{ .int = ai - bi },
+                .int => |bi| {
+                    const ov = @subWithOverflow(ai, bi);
+                    if (ov[1] != 0) return error.RuntimeError;
+                    return .{ .int = ov[0] };
+                },
                 .float => |bf| .{ .float = @as(f64, @floatFromInt(ai)) - bf },
                 else => error.RuntimeError,
             },
@@ -622,7 +640,11 @@ fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value, allocator: std.me
         },
         .mul => switch (a) {
             .int => |ai| switch (b) {
-                .int => |bi| .{ .int = ai * bi },
+                .int => |bi| {
+                    const ov = @mulWithOverflow(ai, bi);
+                    if (ov[1] != 0) return error.RuntimeError;
+                    return .{ .int = ov[0] };
+                },
                 .float => |bf| .{ .float = @as(f64, @floatFromInt(ai)) * bf },
                 else => error.RuntimeError,
             },
@@ -635,7 +657,11 @@ fn binaryOp(op: OpCode.OpCode, a: Value.Value, b: Value.Value, allocator: std.me
         },
         .div_op => switch (a) {
             .int => |ai| switch (b) {
-                .int => |bi| .{ .int = @divTrunc(ai, bi) },
+                .int => |bi| {
+                    if (bi == 0) return error.RuntimeError;
+                    if (ai == std.math.minInt(i64) and bi == -1) return error.RuntimeError;
+                    return .{ .int = @divTrunc(ai, bi) };
+                },
                 .float => |bf| .{ .float = @as(f64, @floatFromInt(ai)) / bf },
                 else => error.RuntimeError,
             },
