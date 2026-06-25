@@ -83,16 +83,27 @@ fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: any
 }
 
 inline fn cacheGetGlobal(self: *VM, name: []const u8) ?Value.Value {
-    for (&self.global_cache) |*entry| {
+    // Search for a hit — promote to front if found
+    for (&self.global_cache, 0..) |*entry, i| {
         if (entry.name.ptr == name.ptr and entry.name.len == name.len) {
-            return entry.value;
+            const val = entry.value;
+            // Found at index i — promote to position 0
+            // Shift entries [0..i-1] right by 1 so they occupy [1..i]
+            var j: usize = i;
+            while (j > 0) : (j -= 1) {
+                self.global_cache[j] = self.global_cache[j - 1];
+            }
+            self.global_cache[0] = .{ .name = name, .value = val };
+            return val;
         }
     }
+    // Miss — fetch from globals, insert at front, evict position 3
     if (self.globals.get(name)) |val| {
-        self.global_cache[0] = self.global_cache[1];
-        self.global_cache[1] = self.global_cache[2];
-        self.global_cache[2] = self.global_cache[3];
-        self.global_cache[3] = .{ .name = name, .value = val };
+        // Right-shift: 0→1, 1→2, 2→3 (3 is evicted)
+        self.global_cache[3] = self.global_cache[2];
+        self.global_cache[2] = self.global_cache[1];
+        self.global_cache[1] = self.global_cache[0];
+        self.global_cache[0] = .{ .name = name, .value = val };
         return val;
     }
     return null;
