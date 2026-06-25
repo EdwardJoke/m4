@@ -68,8 +68,16 @@ pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
         };
     }
 
-    /// Deinitialize the compiler, freeing all owned resources.
+    /// Deinitialize the compiler, freeing all owned resources including FunObj instances.
 pub fn deinit(self: *Compiler) void {
+        // Free FunObj instances stored in the chunk's constant table
+        for (self.chunk.constants.items) |const_val| {
+            if (const_val == .fun_obj) {
+                const fun: *Object.FunObj = @ptrCast(@alignCast(const_val.fun_obj));
+                fun.chunk.deinit();
+                self.allocator.destroy(fun);
+            }
+        }
         self.chunk.deinit();
         self.locals.deinit(self.allocator);
         for (self.loop_stack.items) |*lp| lp.exit_patches.deinit(self.allocator);

@@ -347,6 +347,36 @@ int64_t m4_is_truthy(int64_t val) {
     }
 }
 
+// ─── Memory Management ─────────────────────────────────────────────────────
+
+/// Free an M4Value and any heap-allocated data it owns. Does nothing for nil.
+void m4_free_value(int64_t val) {
+    if (!val) return;
+    if ((void*)val == (void*)&m4_nil) return;
+    M4Value *v = (M4Value*)(void*)val;
+    switch (v->tag) {
+        case M4_STRING:
+            free(v->s.data);
+            break;
+        case M4_VEC:
+            for (int64_t i = 0; i < v->v.len; i++) {
+                m4_free_value((int64_t)(void*)v->v.items[i]);
+            }
+            free(v->v.items);
+            break;
+        case M4_STRUCT:
+            for (int64_t i = 0; i < v->o.count; i++) {
+                m4_free_value((int64_t)(void*)v->o.fields[i]);
+            }
+            free(v->o.fields);
+            free(v->o.names);
+            break;
+        default:
+            break;
+    }
+    free(v);
+}
+
 // ─── Print ─────────────────────────────────────────────────────────────────
 
 static void m4_print_value(int64_t val) {

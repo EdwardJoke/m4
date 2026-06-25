@@ -36,6 +36,8 @@ frame_count: usize,
 globals: std.StringHashMap(Value.Value),
 diag: ?*err_mod.DiagnosticList = null,
 global_cache: [4]GlobalCache = [_]GlobalCache{.{ .name = "", .value = .nil }} ** 4,
+/// Tracks heap-allocated string slices owned by the VM, freed on deinit.
+allocated_strings: std.ArrayList([]const u8),
 
 /// Initialize a new VM with the given allocator. All registers default to nil.
 pub fn init(allocator: std.mem.Allocator) VM {
@@ -47,12 +49,30 @@ pub fn init(allocator: std.mem.Allocator) VM {
         .frames = undefined,
         .frame_count = 0,
         .globals = std.StringHashMap(Value.Value).init(allocator),
+        .allocated_strings = std.ArrayList([]const u8).empty,
     };
 }
 
-/// Deinitialize the VM, freeing the globals hash map.
+/// Deinitialize the VM, freeing the globals hash map and VM-owned heap objects.
+/// NOTE: FunObj instances are owned by the Compiler and freed there, not here.
 pub fn deinit(self: *VM) void {
+    // Free VM-owned heap objects in global variables (StringBuilderObj is
+    // created at runtime by string concat, not by the compiler)
+    var iter = self.globals.iterator();
+    while (iter.next()) |entry| {
+        const val = entry.value_ptr.*;
+        if (val == .string_builder) {
+            const sb: *Object.StringBuilderObj = @ptrCast(@alignCast(val.string_builder));
+            sb.buf.deinit(self.allocator);
+            self.allocator.destroy(sb);
+        }
+    }
     self.globals.deinit();
+    // Free tracked string allocations from stdlib (readln/readAll)
+    for (self.allocated_strings.items) |s| {
+        self.allocator.free(s);
+    }
+    self.allocated_strings.deinit(self.allocator);
 }
 
 /// Register a native function by name, making it callable from m4 code.
