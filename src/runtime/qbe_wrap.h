@@ -10,9 +10,10 @@ extern "C" {
  *   output_path — path for the resulting .s assembly file
  *   target      — target architecture name: "amd64_apple", "amd64_sysv",
  *                 "amd64_win", "arm64", "arm64_apple", "rv64"
+ *   qbe_opt     — QBE optimization level: "fast" or "small", or NULL for default
  * Returns 0 on success, nonzero on error.
  */
-int qbe_compile_ssa(const char *input_path, const char *output_path, const char *target);
+int qbe_compile_ssa(const char *input_path, const char *output_path, const char *target, const char *qbe_opt);
 
 #ifdef __cplusplus
 }

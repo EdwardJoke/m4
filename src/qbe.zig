@@ -27,6 +27,7 @@ pub fn emitProgram(
         .scope_stack = try std.ArrayList(std.ArrayList([]const u8)).initCapacity(allocator, 0),
         .strings = std.StringHashMap([]const u8).init(allocator),
         .str_arena = std.heap.ArenaAllocator.init(allocator),
+        .temp_boxed = std.StringHashMap(bool).init(allocator),
         .loop_exit_label = null,
         .loop_continue_label = null,
         .current_fn = null,
@@ -34,6 +35,7 @@ pub fn emitProgram(
     defer {
         emitter.buf.deinit(allocator);
         emitter.scope.deinit();
+        emitter.temp_boxed.deinit();
         // Free each scope-level key list, then the outer list
         for (emitter.scope_stack.items) |*level| level.deinit(allocator);
         emitter.scope_stack.deinit(allocator);
@@ -104,6 +106,7 @@ const QbeType = enum {
 const VarSlot = struct {
     name: []const u8, // QBE temp name like "%v0"
     ty: QbeType,
+    boxed: bool, // true = M4Value*, false = raw l value
 };
 
 // ─── Emitter ───────────────────────────────────────────────────────────────
@@ -130,6 +133,9 @@ const Emitter = struct {
     // Loop context for continue/esc
     loop_exit_label: ?[]const u8,
     loop_continue_label: ?[]const u8,
+
+    // Tracks whether temporaries are boxed (M4Value*) or unboxed (raw l value)
+    temp_boxed: std.StringHashMap(bool),
 
     // Current function name (for debug comments)
     current_fn: ?[]const u8,
@@ -220,8 +226,17 @@ const Emitter = struct {
 
     fn declareVar(self: *Emitter, name: []const u8, ty: QbeType) ![]const u8 {
         const slot_name = try self.freshVarSlot();
-        try self.scopePut(name, .{ .name = slot_name, .ty = ty });
+        try self.scopePut(name, .{ .name = slot_name, .ty = ty, .boxed = true });
         return slot_name;
+    }
+
+    fn ensureBoxed(self: *Emitter, temp: []const u8) ![]const u8 {
+        const is_boxed = self.temp_boxed.get(temp) orelse return temp;
+        if (is_boxed) return temp;
+        const boxed_temp = try self.freshTemp();
+        try self.fmt("\t{s} =l call $m4_box_int(l {s})\n", .{ boxed_temp, temp });
+        try self.temp_boxed.put(boxed_temp, true);
+        return boxed_temp;
     }
 
     fn lookupVar(self: *Emitter, name: []const u8) ?VarSlot {
@@ -407,7 +422,7 @@ const Emitter = struct {
                 alloca_slot,
             });
             // Update scope with alloca slot
-            try self.scopePut(param.name, .{ .name = alloca_slot, .ty = pty });
+            try self.scopePut(param.name, .{ .name = alloca_slot, .ty = pty, .boxed = true });
         }
 
         // Emit function body
@@ -468,13 +483,14 @@ const Emitter = struct {
 
         const alloca_slot = try self.freshVarSlot();
         try self.fmt("\t{s} =l alloc8 1\n", .{alloca_slot});
-        try self.scopePut(ls.name, .{ .name = alloca_slot, .ty = ty });
 
         if (ls.value) |val_idx| {
             const val_temp = try self.emitExpr(val_idx);
+            const boxed = self.temp_boxed.get(val_temp) orelse true;
+            try self.scopePut(ls.name, .{ .name = alloca_slot, .ty = ty, .boxed = boxed });
             try self.fmt("\tstore{s} {s}, {s}\n", .{ QbeStoreSuffix(ty), val_temp, alloca_slot });
         } else {
-            // Initialize to 0 / nil
+            try self.scopePut(ls.name, .{ .name = alloca_slot, .ty = ty, .boxed = true });
             const zero = if (ty == .d) "0.0" else "0";
             try self.fmt("\tstore{s} {s}, {s}\n", .{ QbeStoreSuffix(ty), zero, alloca_slot });
         }
@@ -496,13 +512,20 @@ const Emitter = struct {
         const end_label = try self.freshBlock("if_end");
         var else_label: ?[]const u8 = null;
 
-        // Emit condition and check truthiness via runtime
+        // Emit condition
         const cond_temp = try self.emitExpr(ifs.cond);
-        const is_truthy = try self.freshTemp();
-        try self.fmt("\t{s} =l call $m4_is_truthy(l {s})\n", .{ is_truthy, cond_temp });
+        const cond_boxed = self.temp_boxed.get(cond_temp) orelse true;
         const then_label = try self.freshBlock("then");
         else_label = try self.freshBlock("else");
-        try self.fmt("\tjnz {s}, {s}, {s}\n", .{ is_truthy, then_label, else_label.? });
+        if (cond_boxed) {
+            const cond_boxed_val = try self.ensureBoxed(cond_temp);
+            const is_truthy = try self.freshTemp();
+            try self.fmt("\t{s} =l call $m4_is_truthy(l {s})\n", .{ is_truthy, cond_boxed_val });
+            try self.fmt("\tjnz {s}, {s}, {s}\n", .{ is_truthy, then_label, else_label.? });
+        } else {
+            // Unboxed: truthy if non-zero
+            try self.fmt("\tjnz {s}, {s}, {s}\n", .{ cond_temp, then_label, else_label.? });
+        }
 
         // Then branch
         try self.fmt("{s}\n", .{then_label});
@@ -608,12 +631,13 @@ const Emitter = struct {
         try self.fmt("\t{s} =l loadl {s}\n", .{ iter_loaded, iter_var });
         const idx_loaded = try self.freshTemp();
         try self.fmt("\t{s} =l loadl {s}\n", .{ idx_loaded, idx_var });
+
+        // Box iterable and index before calling runtime functions
+        const boxed_iter = try self.ensureBoxed(iter_loaded);
+        const boxed_idx = try self.ensureBoxed(idx_loaded);
+
         const len_temp = try self.freshTemp();
-        // len of iterable: currently iterable is expected to have an index_len operation
-        // For vectors/strings, we need a way to get length. For now, assume it's a vec.
-        // The QBE approach: iterate by checking index against 0 (simplified)
-        // Actually, let's call a runtime len() helper
-        try self.fmt("\t{s} =l call $m4_len(l {s})\n", .{ len_temp, iter_loaded });
+        try self.fmt("\t{s} =l call $m4_len(l {s})\n", .{ len_temp, boxed_iter });
         const cmp_temp = try self.freshTemp();
         try self.fmt("\t{s} =w csltl {s}, {s}\n", .{ cmp_temp, idx_loaded, len_temp });
         try self.fmt("\tjnz {s}, {s}, {s}\n", .{ cmp_temp, loop_body, exit_label });
@@ -621,8 +645,7 @@ const Emitter = struct {
         // Body: get element and declare loop variable
         try self.fmt("{s}\n", .{loop_body});
         const elem_temp = try self.freshTemp();
-        // Call runtime get() helper
-        try self.fmt("\t{s} =l call $m4_get(l {s}, l {s})\n", .{ elem_temp, iter_loaded, idx_loaded });
+        try self.fmt("\t{s} =l call $m4_get(l {s}, l {s})\n", .{ elem_temp, boxed_iter, boxed_idx });
         const loop_var_slot = try self.declareVar(fs.var_name, .l);
         try self.fmt("\t{s} =l alloc8 1\n", .{loop_var_slot});
         try self.fmt("\tstorel {s}, {s}\n", .{ elem_temp, loop_var_slot });
@@ -672,6 +695,11 @@ const Emitter = struct {
             const name = target.ident;
             if (self.lookupVar(name)) |slot| {
                 try self.fmt("\tstore{s} {s}, {s}\n", .{ QbeStoreSuffix(slot.ty), value_temp, slot.name });
+                // Update slot's boxed status to match the stored value
+                if (self.temp_boxed.get(value_temp)) |b| {
+                    // Can't update the slot in-place since it's a value copy, re-insert
+                    try self.scope.put(name, .{ .name = slot.name, .ty = slot.ty, .boxed = b });
+                }
             } else {
                 try self.comment(try std.fmt.allocPrint(self.str_arena.allocator(), "assign to unknown var '{s}'", .{name}));
             }
@@ -713,61 +741,65 @@ const Emitter = struct {
 
     fn emitIntLit(self: *Emitter, v: i64) ![]const u8 {
         const temp = try self.freshTemp();
-        try self.fmt("\t{s} =l call $m4_new_int(l {d})\n", .{ temp, v });
+        try self.fmt("\t{s} =l copy {d}\n", .{ temp, v });
+        try self.temp_boxed.put(temp, false);
         return temp;
     }
 
-        fn emitFloatLit(self: *Emitter, v: f64) ![]const u8 {
+    fn emitFloatLit(self: *Emitter, v: f64) ![]const u8 {
         const temp = try self.freshTemp();
-        // QBE requires the d_ prefix (underscore) for float literals.
-        // Call arguments need both a class specifier (d) and the value (d_<float>).
         try self.fmt("\t{s} =l call $m4_new_float(d d_{d})\n", .{ temp, v });
+        try self.temp_boxed.put(temp, true);
         return temp;
     }
 
     fn emitBoolLit(self: *Emitter, v: bool) ![]const u8 {
         const temp = try self.freshTemp();
         const val: i64 = if (v) 1 else 0;
-        try self.fmt("\t{s} =l call $m4_new_bool(l {d})\n", .{ temp, val });
+        try self.fmt("\t{s} =l copy {d}\n", .{ temp, val });
+        try self.temp_boxed.put(temp, false);
         return temp;
     }
 
     fn emitNilLit(self: *Emitter) ![]const u8 {
         const temp = try self.freshTemp();
         try self.fmt("\t{s} =l copy 0\n", .{ temp });
+        try self.temp_boxed.put(temp, false);
         return temp;
     }
 
     fn emitCharLit(self: *Emitter, c: u21) ![]const u8 {
         const temp = try self.freshTemp();
-        try self.fmt("\t{s} =l call $m4_new_char(l {d})\n", .{ temp, @as(i64, @intCast(c)) });
+        try self.fmt("\t{s} =l copy {d}\n", .{ temp, @as(i64, @intCast(c)) });
+        try self.temp_boxed.put(temp, false);
         return temp;
     }
 
     fn emitStrLit(self: *Emitter, s: []const u8) ![]const u8 {
         const gop = try self.strings.getOrPut(s);
         const label = if (gop.found_existing) gop.value_ptr.* else lbl: {
-            // Fallback: should not happen if collectStrings ran
             const lbl = try self.freshStrLabel();
             gop.value_ptr.* = lbl;
             break :lbl lbl;
         };
         const temp = try self.freshTemp();
         try self.fmt("\t{s} =l call $m4_new_string(l {s}, l {d})\n", .{ temp, label, @as(i64, @intCast(s.len)) });
+        try self.temp_boxed.put(temp, true);
         return temp;
     }
 
     fn emitIdent(self: *Emitter, name: []const u8) ![]const u8 {
         if (self.lookupVar(name)) |slot| {
             const temp = try self.freshTemp();
-            // All values are M4Value* (l type) in the runtime
             try self.fmt("\t{s} =l loadl {s}\n", .{ temp, slot.name });
+            try self.temp_boxed.put(temp, slot.boxed);
             return temp;
         }
         // Global/unknown — emit as 0 (nil pointer)
         try self.comment(try std.fmt.allocPrint(self.str_arena.allocator(), "unknown ident '{s}'", .{name}));
         const temp = try self.freshTemp();
         try self.fmt("\t{s} =l copy 0\n", .{temp});
+        try self.temp_boxed.put(temp, false);
         return temp;
     }
 
@@ -777,23 +809,158 @@ const Emitter = struct {
         const right = try self.emitExpr(b.right);
         const temp = try self.freshTemp();
 
-        const runtime_fn: []const u8 = switch (b.op) {
-            .add => "$m4_add",
-            .sub => "$m4_sub",
-            .mul => "$m4_mul",
-            .div => "$m4_div",
-            .mod => "$m4_mod",
-            .eq => "$m4_eq",
-            .neq => "$m4_neq",
-            .gt => "$m4_gt",
-            .lt => "$m4_lt",
-            .gte => "$m4_gte",
-            .lte => "$m4_lte",
-            .and_ => "$m4_and",
-            .or_ => "$m4_or",
-        };
+        // Check if both operands are unboxed (raw ints) → use native QBE ops
+        const left_boxed = self.temp_boxed.get(left) orelse true;
+        const right_boxed = self.temp_boxed.get(right) orelse true;
+        const both_unboxed = !left_boxed and !right_boxed;
 
-        try self.fmt("\t{s} =l call {s}(l {s}, l {s})\n", .{ temp, runtime_fn, left, right });
+        switch (b.op) {
+            .add => {
+                if (both_unboxed) {
+                    try self.fmt("\t{s} =l add {s}, {s}\n", .{ temp, left, right });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_add(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .sub => {
+                if (both_unboxed) {
+                    try self.fmt("\t{s} =l sub {s}, {s}\n", .{ temp, left, right });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_sub(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .mul => {
+                if (both_unboxed) {
+                    try self.fmt("\t{s} =l mul {s}, {s}\n", .{ temp, left, right });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_mul(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .div => {
+                if (both_unboxed) {
+                    try self.fmt("\t{s} =l div {s}, {s}\n", .{ temp, left, right });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_div(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .mod => {
+                if (both_unboxed) {
+                    try self.fmt("\t{s} =l rem {s}, {s}\n", .{ temp, left, right });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_mod(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .eq => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w ceql {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_eq(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .neq => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w cnel {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_neq(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .gt => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w csgtl {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_gt(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .lt => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w csltl {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_lt(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .gte => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w csgel {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_gte(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .lte => {
+                if (both_unboxed) {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w cslel {s}, {s}\n", .{ cmp, left, right });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                } else {
+                    const boxed_l = try self.ensureBoxed(left);
+                    const boxed_r = try self.ensureBoxed(right);
+                    try self.fmt("\t{s} =l call $m4_lte(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                    try self.temp_boxed.put(temp, true);
+                }
+            },
+            .and_ => {
+                const boxed_l = try self.ensureBoxed(left);
+                const boxed_r = try self.ensureBoxed(right);
+                try self.fmt("\t{s} =l call $m4_and(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                try self.temp_boxed.put(temp, true);
+            },
+            .or_ => {
+                const boxed_l = try self.ensureBoxed(left);
+                const boxed_r = try self.ensureBoxed(right);
+                try self.fmt("\t{s} =l call $m4_or(l {s}, l {s})\n", .{ temp, boxed_l, boxed_r });
+                try self.temp_boxed.put(temp, true);
+            },
+        }
         return temp;
     }
 
@@ -801,13 +968,30 @@ const Emitter = struct {
         const u = self.arena.get(idx).unary;
         const operand = try self.emitExpr(u.operand);
         const temp = try self.freshTemp();
+        const is_boxed = self.temp_boxed.get(operand) orelse true;
 
         switch (u.op) {
             .neg => {
-                try self.fmt("\t{s} =l call $m4_neg(l {s})\n", .{ temp, operand });
+                if (is_boxed) {
+                    const boxed_op = try self.ensureBoxed(operand);
+                    try self.fmt("\t{s} =l call $m4_neg(l {s})\n", .{ temp, boxed_op });
+                    try self.temp_boxed.put(temp, true);
+                } else {
+                    try self.fmt("\t{s} =l sub 0, {s}\n", .{ temp, operand });
+                    try self.temp_boxed.put(temp, false);
+                }
             },
             .not => {
-                try self.fmt("\t{s} =l call $m4_not(l {s})\n", .{ temp, operand });
+                if (is_boxed) {
+                    const boxed_op = try self.ensureBoxed(operand);
+                    try self.fmt("\t{s} =l call $m4_not(l {s})\n", .{ temp, boxed_op });
+                    try self.temp_boxed.put(temp, true);
+                } else {
+                    const cmp = try self.freshTemp();
+                    try self.fmt("\t{s} =w ceql {s}, 0\n", .{ cmp, operand });
+                    try self.fmt("\t{s} =l extuw {s}\n", .{ temp, cmp });
+                    try self.temp_boxed.put(temp, false);
+                }
             },
         }
         return temp;
@@ -829,7 +1013,8 @@ const Emitter = struct {
 
         for (c.args) |arg_idx| {
             const arg_temp = try self.emitExpr(arg_idx);
-            try arg_temps.append(self.allocator, arg_temp);
+            const boxed_arg = try self.ensureBoxed(arg_temp);
+            try arg_temps.append(self.allocator, boxed_arg);
         }
 
         // Map stdlib module names to runtime m4_* prefixed names
@@ -857,6 +1042,7 @@ const Emitter = struct {
             try self.fmt("l {s}", .{arg});
         }
         try self.write(")\n");
+        try self.temp_boxed.put(temp, true);
         return temp;
     }
 
@@ -879,36 +1065,41 @@ const Emitter = struct {
         const ix = self.arena.get(idx).index;
         const obj = try self.emitExpr(ix.object);
         const idx_val = try self.emitExpr(ix.idx);
+        const boxed_obj = try self.ensureBoxed(obj);
+        const boxed_idx = try self.ensureBoxed(idx_val);
         const temp = try self.freshTemp();
-        // For now, call runtime $m4_index(object, index)
-        try self.fmt("\t{s} =l call $m4_index(l {s}, l {s})\n", .{ temp, obj, idx_val });
+        try self.fmt("\t{s} =l call $m4_index(l {s}, l {s})\n", .{ temp, boxed_obj, boxed_idx });
+        try self.temp_boxed.put(temp, true);
         return temp;
     }
 
     fn emitField(self: *Emitter, idx: usize) ![]const u8 {
         const f = self.arena.get(idx).field;
         const obj = try self.emitExpr(f.object);
+        const boxed_obj = try self.ensureBoxed(obj);
         const temp = try self.freshTemp();
         const field_label = self.strings.get(f.field_name) orelse {
             try self.comment(try std.fmt.allocPrint(self.str_arena.allocator(), "missing string label for field '{s}'", .{f.field_name}));
             return temp;
         };
-        try self.fmt("\t{s} =l call $m4_field(l {s}, l {s})\n", .{ temp, obj, field_label });
+        try self.fmt("\t{s} =l call $m4_field(l {s}, l {s})\n", .{ temp, boxed_obj, field_label });
+        try self.temp_boxed.put(temp, true);
         return temp;
     }
 
     fn emitStructLit(self: *Emitter, idx: usize) ![]const u8 {
         const sl = self.arena.get(idx).struct_lit;
         const temp = try self.freshTemp();
-        // Type name is ignored by m4_new_struct (void cast), pass 0
         try self.fmt("\t{s} =l call $m4_new_struct(l 0)\n", .{ temp });
+        try self.temp_boxed.put(temp, true);
         for (sl.fields) |field| {
             const val = try self.emitExpr(field.value);
+            const boxed_val = try self.ensureBoxed(val);
             const field_label = self.strings.get(field.name) orelse {
                 try self.comment(try std.fmt.allocPrint(self.str_arena.allocator(), "missing string label for field '{s}'", .{field.name}));
                 continue;
             };
-            try self.fmt("\tcall $m4_struct_set(l {s}, l {s}, l {s})\n", .{ temp, field_label, val });
+            try self.fmt("\tcall $m4_struct_set(l {s}, l {s}, l {s})\n", .{ temp, field_label, boxed_val });
         }
         return temp;
     }
@@ -917,9 +1108,11 @@ const Emitter = struct {
         const items = self.arena.get(idx).vec_lit;
         const temp = try self.freshTemp();
         try self.fmt("\t{s} =l call $m4_new_vec(l {d})\n", .{ temp, @as(i64, @intCast(items.len)) });
+        try self.temp_boxed.put(temp, true);
         for (items, 0..) |item, i| {
             const val = try self.emitExpr(item);
-            try self.fmt("\tcall $m4_vec_set(l {s}, l {d}, l {s})\n", .{ temp, @as(i64, @intCast(i)), val });
+            const boxed_val = try self.ensureBoxed(val);
+            try self.fmt("\tcall $m4_vec_set(l {s}, l {d}, l {s})\n", .{ temp, @as(i64, @intCast(i)), boxed_val });
         }
         return temp;
     }

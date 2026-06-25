@@ -17,7 +17,13 @@ static M4Value* alloc_val(void) {
 
 // ─── Constructor Wrappers ──────────────────────────────────────────────────
 
+// m4_new_int returns the raw l value directly (unboxed).
 int64_t m4_new_int(int64_t val) {
+    return val;
+}
+
+// m4_box_int wraps an unboxed int into a heap-allocated M4Value*.
+int64_t m4_box_int(int64_t val) {
     M4Value *v = alloc_val();
     v->tag = M4_INT;
     v->i = val;
@@ -167,7 +173,7 @@ int64_t m4_add(int64_t a, int64_t b) {
     M4Value *va = (M4Value*)(void*)a;
     M4Value *vb = (M4Value*)(void*)b;
     if (va->tag == M4_INT && vb->tag == M4_INT)
-        return m4_new_int(va->i + vb->i);
+        return m4_box_int(va->i + vb->i);
     if (va->tag == M4_FLOAT && vb->tag == M4_FLOAT)
         return m4_new_float(va->f + vb->f);
     if (va->tag == M4_INT && vb->tag == M4_FLOAT)
@@ -196,7 +202,7 @@ int64_t m4_sub(int64_t a, int64_t b) {
     M4Value *va = (M4Value*)(void*)a;
     M4Value *vb = (M4Value*)(void*)b;
     if (va->tag == M4_INT && vb->tag == M4_INT)
-        return m4_new_int(va->i - vb->i);
+        return m4_box_int(va->i - vb->i);
     if (va->tag == M4_FLOAT && vb->tag == M4_FLOAT)
         return m4_new_float(va->f - vb->f);
     if (va->tag == M4_INT && vb->tag == M4_FLOAT)
@@ -211,7 +217,7 @@ int64_t m4_mul(int64_t a, int64_t b) {
     M4Value *va = (M4Value*)(void*)a;
     M4Value *vb = (M4Value*)(void*)b;
     if (va->tag == M4_INT && vb->tag == M4_INT)
-        return m4_new_int(va->i * vb->i);
+        return m4_box_int(va->i * vb->i);
     if (va->tag == M4_FLOAT && vb->tag == M4_FLOAT)
         return m4_new_float(va->f * vb->f);
     if (va->tag == M4_INT && vb->tag == M4_FLOAT)
@@ -227,7 +233,7 @@ int64_t m4_div(int64_t a, int64_t b) {
     M4Value *vb = (M4Value*)(void*)b;
     if (va->tag == M4_INT && vb->tag == M4_INT) {
         if (vb->i == 0) return (int64_t)(void*)&m4_nil;
-        return m4_new_int(va->i / vb->i);
+        return m4_box_int(va->i / vb->i);
     }
     if (va->tag == M4_FLOAT && vb->tag == M4_FLOAT) {
         if (vb->f == 0.0) return (int64_t)(void*)&m4_nil;
@@ -250,7 +256,7 @@ int64_t m4_mod(int64_t a, int64_t b) {
     M4Value *vb = (M4Value*)(void*)b;
     if (va->tag == M4_INT && vb->tag == M4_INT) {
         if (vb->i == 0) return (int64_t)(void*)&m4_nil;
-        return m4_new_int(va->i % vb->i);
+        return m4_box_int(va->i % vb->i);
     }
     return (int64_t)(void*)&m4_nil;
 }
@@ -258,10 +264,20 @@ int64_t m4_mod(int64_t a, int64_t b) {
 int64_t m4_neg(int64_t a) {
     if (!a) return (int64_t)(void*)&m4_nil;
     M4Value *va = (M4Value*)(void*)a;
-    if (va->tag == M4_INT) return m4_new_int(-va->i);
+    if (va->tag == M4_INT) return m4_box_int(-va->i);
     if (va->tag == M4_FLOAT) return m4_new_float(-va->f);
     return (int64_t)(void*)&m4_nil;
 }
+
+// ─── Unboxed Entry Points ───────────────────────────────────────────────────
+
+int64_t m4_add_u(int64_t a, int64_t b) { return a + b; }
+int64_t m4_sub_u(int64_t a, int64_t b) { return a - b; }
+int64_t m4_mul_u(int64_t a, int64_t b) { return a * b; }
+int64_t m4_div_u(int64_t a, int64_t b) { if (b == 0) return 0; return a / b; }
+int64_t m4_mod_u(int64_t a, int64_t b) { if (b == 0) return 0; return a % b; }
+int64_t m4_neg_u(int64_t a) { return -a; }
+int64_t m4_not_u(int64_t a) { return !a; }
 
 int64_t m4_not(int64_t a) {
     if (!a) return m4_new_bool(1);
@@ -418,7 +434,7 @@ int64_t m4_std_range(int64_t start, int64_t end) {
     int64_t count = (e > s) ? (e - s) : 0;
     int64_t vec = m4_new_vec(count);
     for (int64_t i = 0; i < count; i++) {
-        int64_t elem = m4_new_int(s + i);
+        int64_t elem = m4_box_int(s + i);
         m4_vec_set(vec, i, elem);
     }
     return vec;

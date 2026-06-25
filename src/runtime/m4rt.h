@@ -38,8 +38,11 @@ typedef struct M4Value {
 extern M4Value m4_nil;
 
 // ─── Constructor Wrappers ──────────────────────────────────────────────────
+// m4_new_int returns the raw l value directly (unboxed).
+// m4_box_int wraps an unboxed int into a heap-allocated M4Value*.
 
 int64_t m4_new_int(int64_t val);
+int64_t m4_box_int(int64_t val);
 int64_t m4_new_float(double val);
 int64_t m4_new_bool(int64_t val);
 int64_t m4_new_char(uint32_t val);
@@ -70,6 +73,18 @@ int64_t m4_neg(int64_t a);
 int64_t m4_not(int64_t a);
 int64_t m4_and(int64_t a, int64_t b);
 int64_t m4_or(int64_t a, int64_t b);
+
+// ─── Unboxed Arithmetic Entry Points ───────────────────────────────────────
+// These take raw l values (no M4Value* indirection) and return raw l results.
+// Used by the QBE backend when emitting native ops.
+
+int64_t m4_add_u(int64_t a, int64_t b);
+int64_t m4_sub_u(int64_t a, int64_t b);
+int64_t m4_mul_u(int64_t a, int64_t b);
+int64_t m4_div_u(int64_t a, int64_t b);
+int64_t m4_mod_u(int64_t a, int64_t b);
+int64_t m4_neg_u(int64_t a);
+int64_t m4_not_u(int64_t a);
 
 // ─── Comparison (return M4Value*) ──────────────────────────────────────────
 

@@ -22,6 +22,7 @@ const Flags = struct {
     file_path: ?[]const u8 = null,
     output_path: ?[]const u8 = null,
     build_target: ?[]const u8 = null,
+    qbe_opt: ?[]const u8 = null,
     should_exit: bool = false,
     error_format: ?m4.err.Format = null,
     output_format: ?m4.err.Format = null,
@@ -257,11 +258,23 @@ fn parseFlags(args: []const []const u8) !Flags {
                     }
                     i += 1;
                     flags.build_target = args[i];
+                } else if (std.mem.eql(u8, sub, "-D")) {
+                    if (i + 1 >= args.len) {
+                        std.debug.print("m4: -D requires an optimization level (fast|small)\n", .{});
+                        return error.InvalidFlag;
+                    }
+                    i += 1;
+                    const opt = args[i];
+                    if (!std.mem.eql(u8, opt, "fast") and !std.mem.eql(u8, opt, "small")) {
+                        std.debug.print("m4: invalid -D value '{s}', expected 'fast' or 'small'\n", .{opt});
+                        return error.InvalidFlag;
+                    }
+                    flags.qbe_opt = opt;
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
                     flags.file_path = sub;
                 } else {
                     std.debug.print("m4: unknown build flag '{s}'\n", .{sub});
-                    std.debug.print("Usage: m4 build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+                    std.debug.print("Usage: m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]\n", .{});
                     return error.InvalidFlag;
                 }
             }
@@ -502,12 +515,13 @@ fn printSubcommandHelp(name: []const u8) void {
             \\m4 build — Compile to native binary
             \\
             \\Usage:
-            \\  m4 build <file.m4> [-o <output>] [-target <arch>]
+            \\  m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]
             \\  m4 build help [--zon|--json|--yaml]
             \\
             \\Options:
             \\  -o, --output <path>       Output binary path (default: <file>.out)
             \\  --target <arch>            Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+            \\  -D <level>                 QBE optimization: fast (fast compile, large binary) or small (slow compile, small binary)
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "explain")) {
@@ -595,10 +609,11 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             SubcommandInfo{
                 .name = "build",
                 .description = "Compile to native binary",
-                .usage = "m4 build <file.m4> [-o <output>] [-target <arch>]",
+                .usage = "m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]",
                 .flags = &.{
                     FlagInfo{ .name = "--output", .short = "-o", .description = "Output binary path (default: <file>.out)" },
                     FlagInfo{ .name = "--target", .description = "Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)" },
+                    FlagInfo{ .name = "-D", .description = "QBE optimization level: fast (fast compile, large binary) or small (slow compile, small binary)" },
                 },
             },
             SubcommandInfo{
@@ -754,6 +769,7 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
         source,
         output_path,
         flags.build_target,
+        flags.qbe_opt,
     );
     _ = result;
 
@@ -821,6 +837,7 @@ fn printHelp() void {
         \\
         \\  -o, --output <path>            Output binary path (build only, default: <file>.out)
         \\  --target <arch>                Target architecture for build (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+        \\  -D <level>                     QBE optimization for build (fast|small)
         \\
     , .{VERSION});
 }
