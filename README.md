@@ -53,7 +53,7 @@ zig build
 ## CLI
 
 ```
-m4 v0.3.0 — statically typed, AI-native scripting language
+m4 v0.3.1 — statically typed, AI-native scripting language
 
 Usage:
   m4 [flags] <file.m4>          Run file
@@ -204,7 +204,7 @@ src/
 
 ## Status
 
-m4 is in **early development** (v0.3.0). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
+m4 is in **early development** (v0.3.1). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
