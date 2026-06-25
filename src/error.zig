@@ -143,6 +143,7 @@ pub const ERROR_DB = [_]ErrorInfo{
     .{ .code = "r014", .title = "Out of Memory", .description = "The system allocator failed to allocate memory. This usually means the process has exhausted available memory." },
     .{ .code = "r015", .title = "Invalid Argument", .description = "A native function received an argument of the wrong type or an invalid value — e.g., passing a negative number to str.slice." },
     .{ .code = "r016", .title = "I/O Error", .description = "An input/output operation failed — e.g., reading from a closed stdin, writing to a read-only file, or a broken pipe." },
+    .{ .code = "r017", .title = "Integer Overflow", .description = "An integer arithmetic operation (+, -, *, /, negation) produced a result that exceeds the range of i64. m4 uses 64-bit signed integers and detects overflow at runtime to prevent silent data corruption." },
 };
 
 /// Look up an error code in ERROR_DB and return a human-readable explanation.

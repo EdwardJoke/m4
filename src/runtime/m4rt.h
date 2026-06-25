@@ -84,6 +84,11 @@ int64_t m4_gte(int64_t a, int64_t b);
 
 int64_t m4_is_truthy(int64_t val);
 
+// ─── Memory Management ───────────────────────────────────────────────────
+
+/// Free an M4Value and all its owned heap data (strings, vecs, structs).
+void m4_free_value(int64_t val);
+
 // ─── Stdlib Functions ──────────────────────────────────────────────────────
 
 int64_t m4_std_println(int64_t val);

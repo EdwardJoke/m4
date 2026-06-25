@@ -33,6 +33,7 @@ fn print(_: *VM, args: []const value.Value) value.Value {
 /// Read a single line from stdin (up to newline). Returns the line as a string, or nil on error.
 fn readln(vm: *VM, _: []const value.Value) value.Value {
     var buf = zig_std.ArrayList(u8).empty;
+    defer buf.deinit(vm.allocator);
     var byte: [1]u8 = undefined;
     while (true) {
         const n = posix.read(posix.STDIN_FILENO, &byte) catch |err| {
@@ -46,12 +47,16 @@ fn readln(vm: *VM, _: []const value.Value) value.Value {
             return .nil;
         };
     }
-    return .{ .string = buf.items };
+    // Copy to an independently-owned allocation and track it in the VM
+    const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
+    vm.allocated_strings.append(vm.allocator, str) catch {};
+    return .{ .string = str };
 }
 
 /// Read all remaining data from stdin until EOF. Returns the data as a string, or nil on error.
 fn readAll(vm: *VM, _: []const value.Value) value.Value {
     var buf = zig_std.ArrayList(u8).empty;
+    defer buf.deinit(vm.allocator);
     var chunk: [4096]u8 = undefined;
     while (true) {
         const n = posix.read(posix.STDIN_FILENO, &chunk) catch |err| {
@@ -64,7 +69,10 @@ fn readAll(vm: *VM, _: []const value.Value) value.Value {
             return .nil;
         };
     }
-    return .{ .string = buf.items };
+    // Copy to an independently-owned allocation and track it in the VM
+    const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
+    vm.allocated_strings.append(vm.allocator, str) catch {};
+    return .{ .string = str };
 }
 
 /// Read a single UTF-8 character from stdin. Returns the character, or 0 on EOF.

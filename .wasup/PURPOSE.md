@@ -1,12 +1,12 @@
-# v0.3.0 Purpose
+# v0.3.1 Purpose
 
 ## What
-Ship v0.3.0 with io→std module consolidation, comprehensive API documentation, polished CLI, and optimized error messages.
+Fix all 3 open bugs: integer overflow semantics, backwards LRU cache, and memory management for heap-allocated objects.
 
 ## Why
-The io/std module duplication confuses users and creates maintenance overhead. The language lacks proper API documentation for developer adoption. The CLI and error UX need polish for production readiness.
+All three issues cause incorrect or inconsistent runtime behavior. Integer overflow makes programs behave differently across build modes. The backwards LRU cache provides negligible performance benefit. The complete lack of memory management makes long-running programs and native binaries unusable.
 
 ## Success Criteria
-- [ ] No `io` module — all print/read functionality lives in `std` (zero code duplication)
-- [ ] SPEC.md and language docs document every public stdlib API
-- [ ] CLI help text is clean, error messages are concise with source location info
+- [ ] Integer arithmetic has defined overflow semantics (wrap or error) consistent across all build modes
+- [ ] Global value cache properly promotes hot entries and achieves meaningful hit rates
+- [ ] Heap-allocated objects are freed — no leaks in VM, compiler, stdlib, or QBE runtime
