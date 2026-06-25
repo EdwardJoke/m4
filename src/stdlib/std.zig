@@ -48,8 +48,8 @@ fn readln(vm: *VM, _: []const value.Value) value.Value {
         };
     }
     // Copy to an independently-owned allocation and track it in the VM
-    const str = vm.allocator.duplicate(u8, buf.items) catch return .nil;
-    vm.allocated_strings.append(str) catch {};
+    const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
+    vm.allocated_strings.append(vm.allocator, str) catch {};
     return .{ .string = str };
 }
 
@@ -70,8 +70,8 @@ fn readAll(vm: *VM, _: []const value.Value) value.Value {
         };
     }
     // Copy to an independently-owned allocation and track it in the VM
-    const str = vm.allocator.duplicate(u8, buf.items) catch return .nil;
-    vm.allocated_strings.append(str) catch {};
+    const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
+    vm.allocated_strings.append(vm.allocator, str) catch {};
     return .{ .string = str };
 }
 
