@@ -1,5 +1,13 @@
 # m4
 
+<p align="center">
+  <a href="README.md">English</a> | <a href="README_ZH.md">中文</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/EdwardJoke/m4"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/group/github/EdwardJoke/m4/stars+github/EdwardJoke/m4/license+github/EdwardJoke/m4/contributors+github/EdwardJoke/m4/last-commit.svg?variant=branded&amp;size=xs" /><img alt="shieldcn stats" src="https://shieldcn.dev/group/github/EdwardJoke/m4/stars+github/EdwardJoke/m4/license+github/EdwardJoke/m4/contributors+github/EdwardJoke/m4/last-commit.svg?variant=branded&amp;size=xs&amp;mode=light" /></picture></a>
+</p>
+
 > A statically typed, indentation-sensitive, AI-native scripting language focused on deterministic syntax, low memory usage, fast execution, and reliable LLM code generation.
 
 m4 is a minimal scripting language implemented in Zig, featuring a hand-written scanner, recursive-descent Pratt parser, single-pass bytecode compiler, type checker, and a register-based virtual machine. It is designed from the ground up for low token usage, canonical formatting, and high LLM generation reliability.
@@ -254,3 +262,9 @@ Thanks [QBE](https://c9x.me/compile/) compiler backend.
 Thanks [Zig](https://ziglang.org/).
 
 Thanks [serde.zig](https://github.com/OrlovEvgeny/serde.zig).
+
+## Please consider starring this project if you find it useful. It helps me gauge interest and prioritize development.
+
+<p align="center">
+  <img alt="Star" src="https://shieldcn.dev/chart/github/stars/EdwardJoke/m4.svg?theme=cyan&amp;font=jetbrains-mono&amp;logo=false&amp;title=m4+Programming+Language" />
+</p>

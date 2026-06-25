@@ -1,1 +1,1 @@
-[Claude  please checkout](/AGENTS.md)
+[Claude please checkout](/AGENTS.md)

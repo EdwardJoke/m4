@@ -33,6 +33,10 @@ static Target *tlist[] = {
 /* ─── State ────────────────────────────────────────────────────────────── */
 
 static FILE *wrap_outf;
+static enum {
+    OptFast,
+    OptSmall,
+} opt = OptFast;
 
 static void
 wrap_dbgfile(char *fn)
@@ -82,6 +86,17 @@ wrap_func(Fn *fn)
     gcm(fn);
     filluse(fn);
     ssacheck(fn);
+    if (opt == OptSmall)
+        for (n = 0; n < 2; n++) {
+            gvn(fn);
+            fillcfg(fn);
+            simplcfg(fn);
+            filluse(fn);
+            filldom(fn);
+            gcm(fn);
+            filluse(fn);
+            ssacheck(fn);
+        }
     if (T.cansel) {
         ifconvert(fn);
         fillcfg(fn);
@@ -122,7 +137,7 @@ wrap_func(Fn *fn)
 /* ─── Public API ───────────────────────────────────────────────────────── */
 
 int
-qbe_compile_ssa(const char *input_path, const char *output_path, const char *target)
+qbe_compile_ssa(const char *input_path, const char *output_path, const char *target, const char *qbe_opt)
 {
     Target **t;
     FILE *inf;
@@ -143,8 +158,20 @@ qbe_compile_ssa(const char *input_path, const char *output_path, const char *tar
     /* If no target specified, T keeps its default (zero-initialized).
        We'll fall back to the native target in qbe_build.zig. */
 
-    /* Zero out debug flags */
+    /* Zero out debug flags first */
     memset(debug, 0, sizeof(debug));
+
+    /* Apply QBE optimization flags */
+    if (qbe_opt) {
+        if (strcmp(qbe_opt, "fast") == 0) {
+            opt = OptFast;
+        } else if (strcmp(qbe_opt, "small") == 0) {
+            opt = OptSmall;
+        } else {
+            fprintf(stderr, "qbe_wrap: unknown optimization level '%s'\n", qbe_opt);
+            return 1;
+        }
+    }
 
     /* Open input */
     inf = fopen(input_path, "r");

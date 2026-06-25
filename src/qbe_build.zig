@@ -17,10 +17,12 @@ pub const BuildResult = struct {
 ///
 /// Parameters:
 ///   allocator    — memory allocator (must outlive the returned result)
+///   io           — I/O interface
 ///   source       — the m4 source code
 ///   output_path  — path for the final executable
 ///   target       — target architecture (e.g. "arm64", "amd64_apple", "amd64_sysv", "rv64")
 ///                  If null, auto-detects from the host.
+///   qbe_opt      — QBE optimization level: "fast" or "small", or null for default
 ///
 pub fn buildNative(
     allocator: std.mem.Allocator,
@@ -28,6 +30,7 @@ pub fn buildNative(
     source: []const u8,
     output_path: []const u8,
     target: ?[]const u8,
+    qbe_opt: ?[]const u8,
 ) !BuildResult {
     // ── Step 1: Parse ──────────────────────────────────────────────────
     var parser = Parser.init(allocator, source);
@@ -54,7 +57,6 @@ pub fn buildNative(
 
     const ssa_path = ".m4_cache/prog.ssa";
     const asm_path = ".m4_cache/prog.s";
-    const obj_path = ".m4_cache/prog.o";
     const rt_obj_path = ".m4_cache/m4rt.o";
 
     // Write files using C stdio (project links libc)
@@ -83,100 +85,84 @@ pub fn buildNative(
     defer allocator.free(asm_path_z);
     const target_z = try allocator.dupeZ(u8, resolved_target);
     defer allocator.free(target_z);
+    const qbe_opt_z = if (qbe_opt) |opt| try allocator.dupeZ(u8, opt) else null;
+    defer if (qbe_opt_z) |z| allocator.free(z);
+    const qbe_opt_ptr: ?[*:0]const u8 = if (qbe_opt_z) |z| @ptrFromInt(@intFromPtr(z.ptr)) else null;
 
-    const qbe_result = qbe_compile_ssa(ssa_path_z, asm_path_z, target_z);
+    const qbe_result = qbe_compile_ssa(ssa_path_z, asm_path_z, target_z, qbe_opt_ptr);
     if (qbe_result != 0) {
         std.debug.print("m4 build: QBE compilation failed (error {d})\n", .{qbe_result});
         return error.QbeCompileError;
     }
 
-    // ── Step 5: Assemble .s → .o ──────────────────────────────────────
+    // ── Step 5: Compile m4rt.c → m4rt.o (cached — runtime never changes) ──
+    {
+        // Check if cached m4rt.o exists
+        const rt_cached = exists: {
+            const f = fopen(rt_obj_path, "r");
+            if (f) |handle| {
+                _ = fclose(handle);
+                break :exists true;
+            }
+            break :exists false;
+        };
+
+        if (!rt_cached) {
+            const host_target = getHostTarget();
+            const is_cross = !std.mem.eql(u8, resolved_target, host_target);
+
+            const cc_args = if (is_cross)
+                &[_][]const u8{ "cc", "-c", "-std=c99", "-I.m4_cache", "-target", targetToClangTarget(resolved_target), ".m4_cache/m4rt.c", "-o", rt_obj_path }
+            else
+                &[_][]const u8{ "cc", "-c", "-std=c99", "-I.m4_cache", ".m4_cache/m4rt.c", "-o", rt_obj_path };
+
+            const result = try std.process.run(allocator, io, .{ .argv = cc_args });
+            defer {
+                allocator.free(result.stdout);
+                allocator.free(result.stderr);
+            }
+            if (result.term != .exited or result.term.exited != 0) {
+                std.debug.print("m4 build: runtime compilation failed\n{s}\n", .{result.stderr});
+                return error.RuntimeCompileError;
+            }
+        }
+    }
+
+    // ── Step 6: Assemble .s + link → final binary ────────────────────────
     {
         const host_target = getHostTarget();
         const is_cross = !std.mem.eql(u8, resolved_target, host_target);
 
-        const as_args = if (is_cross) blk: {
-            // Cross-compilation: only macOS↔macOS is supported
-            const as_arch = targetToAsArch(resolved_target) orelse {
-                std.debug.print("m4 build: cross-compilation to '{s}' requires external toolchain.\n", .{resolved_target});
-                return error.CrossCompileNotSupported;
-            };
-            break :blk &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
-        } else if (isMacOS()) blk: {
+        // Build argv: cc [arch] [target] -std=c99 -o output prog.s m4rt.o
+        var argv = std.ArrayList([]const u8).empty;
+        defer argv.deinit(allocator);
+        try argv.append(allocator, "cc");
+        if (isMacOS() and !is_cross) {
             const as_arch = targetToAsArch(resolved_target) orelse "x86_64";
-            break :blk &[_][]const u8{ "as", "-arch", as_arch, asm_path, "-o", obj_path };
-        } else &[_][]const u8{ "as", asm_path, "-o", obj_path };
+            try argv.append(allocator, "-arch");
+            try argv.append(allocator, as_arch);
+        }
+        try argv.append(allocator, "-std=c99");
+        try argv.append(allocator, "-I.m4_cache");
+        if (is_cross) {
+            try argv.append(allocator, "-target");
+            try argv.append(allocator, targetToClangTarget(resolved_target));
+        }
+        try argv.append(allocator, "-o");
+        try argv.append(allocator, output_path);
+        try argv.append(allocator, asm_path);
+        try argv.append(allocator, rt_obj_path);
 
         const result = try std.process.run(allocator, io, .{
-            .argv = as_args,
+            .argv = try argv.toOwnedSlice(allocator),
         });
         defer {
             allocator.free(result.stdout);
             allocator.free(result.stderr);
         }
         if (result.term != .exited or result.term.exited != 0) {
-            std.debug.print("m4 build: assembler failed\n{s}\n", .{result.stderr});
-            return error.AssembleError;
-        }
-    }
-
-    // ── Step 6: Compile m4rt.c → m4rt.o ────────────────────────────────
-    {
-        const host_target = getHostTarget();
-        const is_cross = !std.mem.eql(u8, resolved_target, host_target);
-
-        const cc_args = if (is_cross) blk: {
-            break :blk &[_][]const u8{
-                "cc", "-c", "-std=c99", "-I.m4_cache",
-                "-target", targetToClangTarget(resolved_target),
-                ".m4_cache/m4rt.c",
-                "-o", rt_obj_path,
-            };
-        } else &[_][]const u8{
-            "cc", "-c", "-std=c99", "-I.m4_cache",
-            ".m4_cache/m4rt.c",
-            "-o", rt_obj_path,
-        };
-
-        const result = try std.process.run(allocator, io, .{
-            .argv = cc_args,
-        });
-        defer {
-            allocator.free(result.stdout);
-            allocator.free(result.stderr);
-        }
-        if (result.term != .exited or result.term.exited != 0) {
-            std.debug.print("m4 build: runtime compilation failed\n{s}\n", .{result.stderr});
-            return error.RuntimeCompileError;
-        }
-    }
-
-    // ── Step 7: Link .o + m4rt.o → final binary ────────────────────────
-    {
-        const host_target = getHostTarget();
-        const is_cross = !std.mem.eql(u8, resolved_target, host_target);
-
-        const ld_args = if (is_cross) blk: {
-            break :blk &[_][]const u8{
-                "cc", "-target", targetToClangTarget(resolved_target),
-                "-o", output_path,
-                obj_path, rt_obj_path,
-            };
-        } else &[_][]const u8{
-            "cc", "-o", output_path,
-            obj_path, rt_obj_path,
-        };
-
-        const result = try std.process.run(allocator, io, .{
-            .argv = ld_args,
-        });
-        defer {
-            allocator.free(result.stdout);
-            allocator.free(result.stderr);
-        }
-        if (result.term != .exited or result.term.exited != 0) {
-            std.debug.print("m4 build: linker failed\n{s}\n", .{result.stderr});
-            return error.LinkError;
+            std.debug.print("m4 build: assembly/linking failed\n{s}\n", .{result.stderr});
+            return error.CompileLinkError;
         }
     }
 
@@ -194,7 +180,7 @@ pub fn buildNative(
 // ─── C FFI ─────────────────────────────────────────────────────────────────
 
 /// C function from the linked qbe_wrap.c
-extern "c" fn qbe_compile_ssa(input_path: [*:0]const u8, output_path: [*:0]const u8, target: [*:0]const u8) c_int;
+extern "c" fn qbe_compile_ssa(input_path: [*:0]const u8, output_path: [*:0]const u8, target: [*:0]const u8, qbe_opt: ?[*:0]const u8) c_int;
 
 /// C stdio functions (project links libc)
 extern "c" fn fopen(path: [*:0]const u8, mode: [*:0]const u8) ?*anyopaque;
