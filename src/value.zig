@@ -13,6 +13,8 @@ pub const Value = union(enum) {
     string_builder: *anyopaque,
     @"fn": *anyopaque,
     fun_obj: *anyopaque,
+    thread_handle: *anyopaque,
+    channel: *anyopaque,
     vec: *anyopaque,
 
     /// Check structural equality between two values. Compares by type and content.
@@ -33,6 +35,8 @@ pub const Value = union(enum) {
             },
             .@"fn" => |a| a == other.@"fn",
             .fun_obj => |a| a == other.fun_obj,
+            .thread_handle => |a| a == other.thread_handle,
+            .channel => |a| a == other.channel,
             .vec => |a| a == other.vec,
         };
     }
@@ -64,6 +68,8 @@ pub const Value = union(enum) {
             },
             .@"fn" => try writer.writeAll("<native-fn>"),
             .fun_obj => try writer.writeAll("<fun>"),
+            .thread_handle => try writer.writeAll("<thread-handle>"),
+            .channel => try writer.writeAll("<channel>"),
             .vec => try writer.writeAll("<vec>"),
         }
     }

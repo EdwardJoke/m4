@@ -161,6 +161,10 @@ qbe_compile_ssa(const char *input_path, const char *output_path, const char *tar
     /* Zero out debug flags first */
     memset(debug, 0, sizeof(debug));
 
+    /* Reset opt to default before parsing qbe_opt so prior calls
+       don't leak the previous setting. */
+    opt = OptFast;
+
     /* Apply QBE optimization flags */
     if (qbe_opt) {
         if (strcmp(qbe_opt, "fast") == 0) {

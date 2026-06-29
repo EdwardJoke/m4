@@ -4,8 +4,8 @@ const value = @import("../value.zig");
 
 /// Register all str module native functions (len, slice) with the VM.
 pub fn register(vm: *VM) !void {
-    try vm.registerNative("str.len", @constCast(@ptrCast(&strLen)));
-    try vm.registerNative("str.slice", @constCast(@ptrCast(&strSlice)));
+    try vm.registerNative("str.len", @ptrCast(@constCast(&strLen)));
+    try vm.registerNative("str.slice", @ptrCast(@constCast(&strSlice)));
 }
 
 /// Return the byte length of a string. Returns 0 for non-string arguments.

@@ -15,7 +15,7 @@ pub const TypeEnv = struct {
     return_type: ?*const Type.Type,
     in_loop: bool,
 
-        /// Create a new root type environment with no parent scope.
+    /// Create a new root type environment with no parent scope.
     pub fn init(allocator: std.mem.Allocator) TypeEnv {
         return .{
             .parent = null,
@@ -175,15 +175,15 @@ pub const Checker = struct {
             try self.root_env.define("std.readln", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("std.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("std.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
-            try self.root_env.define("std.range", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
+            try self.root_env.define("std.range", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
         } else if (std.mem.eql(u8, module, "fs")) {
             try self.root_env.define("fs.read", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("fs.write", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }, .{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.write", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .str } }, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
             try self.root_env.define("fs.exists", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
             try self.root_env.define("fs.delete", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
         } else if (std.mem.eql(u8, module, "str")) {
             try self.root_env.define("str.len", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .i32 })) } }), false);
-            try self.root_env.define("str.slice", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }, .{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("str.slice", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
         } else if (std.mem.eql(u8, module, "thread")) {
             try self.root_env.define("thread.spawn", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
             try self.root_env.define("thread.join", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
@@ -191,7 +191,7 @@ pub const Checker = struct {
             try self.root_env.define("thread.send", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
             try self.root_env.define("thread.recv", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
         } else if (std.mem.eql(u8, module, "range")) {
-            try self.root_env.define("range.range", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }, .{ .primitive = .i32 }}, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
+            try self.root_env.define("range.range", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
         }
     }
 
@@ -476,9 +476,16 @@ pub const Checker = struct {
 fn isNumeric(t: *const Type.Type) bool {
     return switch (t.*) {
         .primitive => |p| switch (p) {
-            .i8, .i16, .i32, .i64,
-            .u8, .u16, .u32, .u64,
-            .f32, .f64,
+            .i8,
+            .i16,
+            .i32,
+            .i64,
+            .u8,
+            .u16,
+            .u32,
+            .u64,
+            .f32,
+            .f64,
             => true,
             else => false,
         },

@@ -40,6 +40,9 @@ extern M4Value m4_nil;
 // ─── Constructor Wrappers ──────────────────────────────────────────────────
 // m4_new_int returns the raw l value directly (unboxed).
 // m4_box_int wraps an unboxed int into a heap-allocated M4Value*.
+// m4_new_bool, m4_new_char, nil-as-null produce boxed M4Value* with the
+// correct tag — the QBE backend emits them directly as boxed rather than
+// erasing the kind through m4_box_int.
 
 int64_t m4_new_int(int64_t val);
 int64_t m4_box_int(int64_t val);
@@ -76,7 +79,8 @@ int64_t m4_or(int64_t a, int64_t b);
 
 // ─── Unboxed Arithmetic Entry Points ───────────────────────────────────────
 // These take raw l values (no M4Value* indirection) and return raw l results.
-// Used by the QBE backend when emitting native ops.
+// div_u and mod_u return boxed M4Value* (or &m4_nil on divide-by-zero) so
+// nil semantics are preserved for the QBE backend.
 
 int64_t m4_add_u(int64_t a, int64_t b);
 int64_t m4_sub_u(int64_t a, int64_t b);
@@ -102,7 +106,8 @@ int64_t m4_is_truthy(int64_t val);
 // ─── Memory Management ───────────────────────────────────────────────────
 
 /// Free an M4Value and all its owned heap data (strings, vecs, structs).
-void m4_free_value(int64_t val);
+/// Accepts only boxed (heap-allocated) M4Value pointers — NOT unboxed ints.
+void m4_free_value(M4Value *val);
 
 // ─── Stdlib Functions ──────────────────────────────────────────────────────
 

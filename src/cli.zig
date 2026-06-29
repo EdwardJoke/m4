@@ -437,8 +437,14 @@ fn runLint(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: Fl
     var checker = m4.type_check.Checker.init(allocator, &parser.arena);
     defer checker.deinit();
     if (flags.error_format != null) checker.diag = &diag_list;
-    checker.check(stmts) catch {
-        m4.err.printDiagnostic("t001", "Type Error", "internal checker error", null);
+    checker.check(stmts) catch |err| {
+        if (flags.error_format) |fmt| {
+            const out = try m4.err.formatDiagnostics(allocator, diag_list.items(), fmt);
+            defer allocator.free(out);
+            std.debug.print("{s}\n", .{out});
+        } else {
+            m4.err.printDiagnostic("t001", "Type Error", @errorName(err), null);
+        }
         return error.ParseError;
     };
     if (checker.error_count > 0) {
@@ -844,4 +850,26 @@ fn printHelp() void {
 
 fn printVersion() void {
     std.debug.print("m4 v{s}\n", .{VERSION});
+}
+
+test "cli: -D fast is accepted" {
+    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "fast" };
+    const flags = try parseFlags(args);
+    try std.testing.expectEqualStrings("fast", flags.qbe_opt.?);
+}
+
+test "cli: -D small is accepted" {
+    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "small" };
+    const flags = try parseFlags(args);
+    try std.testing.expectEqualStrings("small", flags.qbe_opt.?);
+}
+
+test "cli: -D missing argument returns InvalidFlag" {
+    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D" };
+    try std.testing.expectError(error.InvalidFlag, parseFlags(args));
+}
+
+test "cli: -D with invalid value returns InvalidFlag" {
+    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "invalid" };
+    try std.testing.expectError(error.InvalidFlag, parseFlags(args));
 }

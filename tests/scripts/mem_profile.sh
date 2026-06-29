@@ -20,11 +20,18 @@ measure() {
     local cmd="$@"
     
     printf "  %-20s" "[$label]"
-    local output
-    output=$(/usr/bin/time -l $cmd 2>&1)
-    local rss=$(echo "$output" | grep "maximum resident" | awk '{print $1}')
-    local rss_mb=$((rss / 1024 / 1024))
-    local wall=$(echo "$output" | grep "real" | awk '{print $1}')
+    local output rss rss_mb wall
+    if [[ "$(uname)" == "Darwin" ]]; then
+        output=$(/usr/bin/time -l $cmd 2>&1)
+        rss=$(echo "$output" | grep "maximum resident" | awk '{print $1}')
+        rss_mb=$((rss / 1024 / 1024))
+        wall=$(echo "$output" | grep "real" | awk '{print $1}')
+    else
+        output=$(/usr/bin/time -v $cmd 2>&1)
+        rss=$(echo "$output" | grep "Maximum resident" | awk '{print $NF}')
+        rss_mb=$((rss / 1024))
+        wall=$(echo "$output" | grep "Elapsed" | awk '{print $NF}')
+    fi
     printf "Peak RSS: %4d MB | Time: %s\n" "$rss_mb" "$wall"
 }
 

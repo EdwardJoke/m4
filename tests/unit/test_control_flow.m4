@@ -3,7 +3,8 @@
 
 use std
 
-fun test_if_elif_else()
+fun test_if_elif_else() i32
+    mut fail i32 = 0
     std.println("--- if/elif/else ---")
 
     # Simple if
@@ -30,16 +31,25 @@ fun test_if_elif_else()
     else
         std.println("x >= 80")
 
+    if x != 50
+        fail = fail + 1
+
     # if with no else
     let y i32 = 100
     if y > 50
         std.println("y > 50: no else branch")
 
+    if y != 100
+        fail = fail + 1
+
     # Edge: conditionals with comparisons
     if x == 50
         std.println("x == 50: equality works")
 
-fun test_loop()
+    ret fail
+
+fun test_loop() i32
+    mut fail i32 = 0
     std.println("--- loop ---")
 
     mut count i32 = 0
@@ -49,7 +59,14 @@ fun test_loop()
         if count >= 3
             esc
 
-fun test_loop_with_continue()
+    if count != 3
+        std.print("FAIL: expected count=3, got ")
+        std.println(count)
+        fail = fail + 1
+
+    ret fail
+
+fun test_loop_with_continue() i32
     std.println("--- loop with continue ---")
 
     mut n i32 = 0
@@ -61,7 +78,9 @@ fun test_loop_with_continue()
             continue
         std.println(n)
 
-fun test_for_over_vec()
+    ret 0
+
+fun test_for_over_vec() i32
     std.println("--- for over vector ---")
 
     for fruit in ["apple", "banana", "cherry"]
@@ -71,7 +90,9 @@ fun test_for_over_vec()
     for num in [10, 20, 30, 40]
         std.println(num)
 
-fun test_for_over_range()
+    ret 0
+
+fun test_for_over_range() i32
     std.println("--- for over range ---")
 
     for n in std.range(0, 5)
@@ -81,7 +102,10 @@ fun test_for_over_range()
     for n in std.range(3, 7)
         std.println(n)
 
-fun test_nested_if()
+    ret 0
+
+fun test_nested_if() i32
+    mut fail i32 = 0
     std.println("--- Nested if ---")
 
     let a i32 = 10
@@ -99,14 +123,24 @@ fun test_nested_if()
     else
         std.println("nested if: outer else")
 
-fun test_nested_loops()
+    if a != 10
+        fail = fail + 1
+
+    if b != 20
+        fail = fail + 1
+
+    ret fail
+
+fun test_nested_loops() i32
     std.println("--- Nested loops ---")
 
     for x in [1, 2, 3]
         for y in [4, 5, 6]
             std.println(x * y)
 
-fun test_for_with_esc()
+    ret 0
+
+fun test_for_with_esc() i32
     std.println("--- for with esc ---")
 
     for n in std.range(0, 10)
@@ -114,15 +148,25 @@ fun test_for_with_esc()
             esc
         std.println(n)
 
-pub fun main() i32
-    test_if_elif_else()
-    test_loop()
-    test_loop_with_continue()
-    test_for_over_vec()
-    test_for_over_range()
-    test_nested_if()
-    test_nested_loops()
-    test_for_with_esc()
-
-    std.println("--- All control flow tests passed ---")
     ret 0
+
+pub fun main() i32
+    let failures = 0
+
+    failures = failures + test_if_elif_else()
+    failures = failures + test_loop()
+    failures = failures + test_loop_with_continue()
+    failures = failures + test_for_over_vec()
+    failures = failures + test_for_over_range()
+    failures = failures + test_nested_if()
+    failures = failures + test_nested_loops()
+    failures = failures + test_for_with_esc()
+
+    if failures == 0
+        std.println("--- All control flow tests passed ---")
+    else
+        std.print("--- FAILED: ")
+        std.print(failures)
+        std.println(" test(s) failed ---")
+
+    ret failures

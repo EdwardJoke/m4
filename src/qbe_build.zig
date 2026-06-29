@@ -57,7 +57,6 @@ pub fn buildNative(
 
     const ssa_path = ".m4_cache/prog.ssa";
     const asm_path = ".m4_cache/prog.s";
-    const rt_obj_path = ".m4_cache/m4rt.o";
 
     // Write files using C stdio (project links libc)
     {
@@ -78,6 +77,21 @@ pub fn buildNative(
 
     // ── Step 4: Compile .ssa → .s via QBE library ──────────────────────
     const resolved_target = target orelse getHostTarget();
+
+    // Runtime object path keyed by hash of runtime source + target
+    const rt_cache_key = blk: {
+        var h: u64 = 0;
+        for (m4rt_c_src) |b| h = h *% 31 +% b;
+        for (resolved_target) |b| h = h *% 31 +% b;
+        break :blk h;
+    };
+    const rt_obj_path = try std.fmt.allocPrint(allocator, ".m4_cache/m4rt_{x}.o", .{rt_cache_key});
+    const rt_obj_path_z = try allocator.dupeZ(u8, rt_obj_path);
+    defer {
+        allocator.free(rt_obj_path);
+        allocator.free(rt_obj_path_z);
+    }
+
     // Need null-terminated strings for C FFI
     const ssa_path_z = try allocator.dupeZ(u8, ssa_path);
     defer allocator.free(ssa_path_z);
@@ -95,19 +109,18 @@ pub fn buildNative(
         return error.QbeCompileError;
     }
 
-    // ── Step 5: Compile m4rt.c → m4rt.o (cached — runtime never changes) ──
+    // ── Step 5: Compile m4rt.c → m4rt.o (cached by source+target hash) ──
     {
-        // Check if cached m4rt.o exists
-        const rt_cached = exists: {
-            const f = fopen(rt_obj_path, "r");
+        const exists = check: {
+            const f = fopen(rt_obj_path_z, "r");
             if (f) |handle| {
                 _ = fclose(handle);
-                break :exists true;
+                break :check true;
             }
-            break :exists false;
+            break :check false;
         };
 
-        if (!rt_cached) {
+        if (!exists) {
             const host_target = getHostTarget();
             const is_cross = !std.mem.eql(u8, resolved_target, host_target);
 

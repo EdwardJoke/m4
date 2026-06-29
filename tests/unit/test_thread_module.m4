@@ -87,23 +87,39 @@ fun test_channel_different_types()
     std.print("bool: ")
     std.println(r3)
 
+fun channel_worker(ch)
+    thread.send(ch, 42)
+    thread.send(ch, 99)
+    thread.send(ch, "done")
+
 fun test_spawn_with_channel()
     std.println("--- thread.spawn with channel ---")
 
     let ch = thread.channel()
+    let handle = thread.spawn(channel_worker, ch)
 
-    # Send values to channel directly
-    let s1 = thread.send(ch, 99)
-    let s2 = thread.send(ch, 200)
-
-    # Receive them
     let r1 = thread.recv(ch)
-    let r2 = thread.recv(ch)
+    if r1 != 42
+        std.println("FAIL: expected 42 from worker")
+        ret 1
 
-    std.print("from channel: ")
+    let r2 = thread.recv(ch)
+    if r2 != 99
+        std.println("FAIL: expected 99 from worker")
+        ret 1
+
+    let r3 = thread.recv(ch)
+    if r3 != "done"
+        std.println("FAIL: expected 'done' from worker")
+        ret 1
+
+    let join_result = thread.join(handle)
+    std.print("from worker via channel: ")
     std.print(r1)
     std.print(", ")
-    std.println(r2)
+    std.print(r2)
+    std.print(", ")
+    std.println(r3)
 
 pub fun main() i32
     test_spawn_join_basic()

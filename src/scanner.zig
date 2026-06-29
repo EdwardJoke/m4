@@ -360,9 +360,10 @@ test "scanner: indentation block" {
 
 test "scanner: all keywords" {
     const keywords = [_]Token.Tag{
-        .kw_let, .kw_mut, .kw_fun, .kw_pub,
-        .kw_if, .kw_elif, .kw_else, .kw_loop, .kw_for,
-        .kw_continue, .kw_esc, .kw_ret, .kw_nil, .kw_use, .kw_type,
+        .kw_let, .kw_mut,      .kw_fun,  .kw_pub,
+        .kw_if,  .kw_elif,     .kw_else, .kw_loop,
+        .kw_for, .kw_continue, .kw_esc,  .kw_ret,
+        .kw_nil, .kw_use,      .kw_type,
     };
     for (keywords) |kw| {
         const name = @tagName(kw)["kw_".len..];
@@ -391,9 +392,9 @@ test "scanner: operators" {
     var s = Scanner.init(std.testing.allocator, "+ - * / % == != > < >= <= && || =");
     defer s.deinit();
     const expected = [_]Token.Tag{
-        .plus, .minus, .star, .slash, .percent,
-        .eq_eq, .bang_eq, .gt, .lt, .gt_eq, .lt_eq,
-        .and_and, .pipe_pipe, .eq,
+        .plus,  .minus,   .star,      .slash, .percent,
+        .eq_eq, .bang_eq, .gt,        .lt,    .gt_eq,
+        .lt_eq, .and_and, .pipe_pipe, .eq,
     };
     for (expected) |tag| {
         try std.testing.expectEqual(tag, s.nextToken().tag);
@@ -406,4 +407,3 @@ test "scanner: float literal" {
     const tok = s.nextToken();
     try std.testing.expectEqual(Token.Tag.float_literal, tok.tag);
 }
-

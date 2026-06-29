@@ -56,7 +56,7 @@ pub const Compiler = struct {
     diag: ?*err_mod.DiagnosticList = null,
 
     /// Initialize a new compiler with the given allocator and AST arena.
-pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
+    pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
         return .{
             .allocator = allocator,
             .chunk = Chunk.init(allocator),
@@ -69,7 +69,7 @@ pub fn init(allocator: std.mem.Allocator, arena: *ast.NodeArena) Compiler {
     }
 
     /// Deinitialize the compiler, freeing all owned resources including FunObj instances.
-pub fn deinit(self: *Compiler) void {
+    pub fn deinit(self: *Compiler) void {
         // Free FunObj instances stored in the chunk's constant table
         for (self.chunk.constants.items) |const_val| {
             if (const_val == .fun_obj) {
@@ -412,10 +412,19 @@ pub fn deinit(self: *Compiler) void {
                 const lr = try self.compileExpr(b.left);
                 const rr = try self.compileExpr(b.right);
                 const op: OpCode.OpCode = switch (b.op) {
-                    .add => .add, .sub => .sub, .mul => .mul, .div => .div_op,
-                    .mod => .mod_op, .eq => .eq, .neq => .neq,
-                    .gt => .gt, .lt => .lt, .gte => .gte, .lte => .lte,
-                    .and_ => .and_, .or_ => .or_,
+                    .add => .add,
+                    .sub => .sub,
+                    .mul => .mul,
+                    .div => .div_op,
+                    .mod => .mod_op,
+                    .eq => .eq,
+                    .neq => .neq,
+                    .gt => .gt,
+                    .lt => .lt,
+                    .gte => .gte,
+                    .lte => .lte,
+                    .and_ => .and_,
+                    .or_ => .or_,
                 };
                 try self.chunk.write(OpCode.encodeABC(op, lr, lr, rr), 1);
                 self.reg_count -= 1;
@@ -423,7 +432,10 @@ pub fn deinit(self: *Compiler) void {
             },
             .unary => |u| {
                 const or_ = try self.compileExpr(u.operand);
-                const op: OpCode.OpCode = switch (u.op) { .neg => .neg, .not => .not_ };
+                const op: OpCode.OpCode = switch (u.op) {
+                    .neg => .neg,
+                    .not => .not_,
+                };
                 try self.chunk.write(OpCode.encodeAx(op, or_), 1);
                 return or_;
             },
@@ -674,10 +686,19 @@ fn compileExprToChunk(
             const lr = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, b.left);
             const rr = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, b.right);
             const op: OpCode.OpCode = switch (b.op) {
-                .add => .add, .sub => .sub, .mul => .mul, .div => .div_op,
-                .mod => .mod_op, .eq => .eq, .neq => .neq,
-                .gt => .gt, .lt => .lt, .gte => .gte, .lte => .lte,
-                .and_ => .and_, .or_ => .or_,
+                .add => .add,
+                .sub => .sub,
+                .mul => .mul,
+                .div => .div_op,
+                .mod => .mod_op,
+                .eq => .eq,
+                .neq => .neq,
+                .gt => .gt,
+                .lt => .lt,
+                .gte => .gte,
+                .lte => .lte,
+                .and_ => .and_,
+                .or_ => .or_,
             };
             try chunk.write(OpCode.encodeABC(op, lr, lr, rr), 1);
             reg_count.* -= 1;
@@ -685,7 +706,10 @@ fn compileExprToChunk(
         },
         .unary => |u| {
             const or_ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, u.operand);
-            const op: OpCode.OpCode = switch (u.op) { .neg => .neg, .not => .not_ };
+            const op: OpCode.OpCode = switch (u.op) {
+                .neg => .neg,
+                .not => .not_,
+            };
             try chunk.write(OpCode.encodeAx(op, or_), 1);
             return or_;
         },
@@ -762,7 +786,9 @@ fn compileExprToChunk(
             try chunk.write(OpCode.encodeAx(.try_prop, r), 1);
             return r;
         },
-        else => { return 0; },
+        else => {
+            return 0;
+        },
     };
 }
 
@@ -916,4 +942,29 @@ test "compiler: simple arithmetic" {
     defer c.deinit();
     try c.compile(&[_]usize{stmt});
     try std.testing.expect(c.chunk.len() >= 4);
+}
+
+test "compiler: deinit with FunObj constant" {
+    var arena = ast.NodeArena.init(std.testing.allocator);
+    defer arena.deinit();
+    var c = Compiler.init(std.testing.allocator, &arena);
+    defer c.deinit();
+
+    const fun = try c.allocator.create(Object.FunObj);
+    fun.* = Object.FunObj{
+        .name = "test_fn",
+        .chunk = Chunk.init(c.allocator),
+        .param_count = 0,
+    };
+    _ = try c.chunk.addConstant(.{ .fun_obj = fun });
+}
+
+test "compiler: compileError fallback diagnostic with null diag" {
+    var arena = ast.NodeArena.init(std.testing.allocator);
+    defer arena.deinit();
+    var c = Compiler.init(std.testing.allocator, &arena);
+    defer c.deinit();
+    c.diag = null;
+    try std.testing.expectError(error.CompileError, c.compileError("c999", "test error {d}", .{42}));
+    try std.testing.expectEqual(@as(u32, 1), c.error_count);
 }

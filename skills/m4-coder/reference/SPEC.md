@@ -1,4 +1,4 @@
-# m4 Language Specification (Draft v0.2.2)
+# m4 Language Specification (Draft v0.3.2)
 
 ## Overview
 
@@ -65,10 +65,12 @@ Blocks are defined by indentation only.
 Example:
 
 ```m4
+use std
+
 if x > 10
-    io.println("large")
+    std.println("large")
 else
-    io.println("small")
+    std.println("small")
 ```
 
 ---
@@ -414,25 +416,31 @@ The standard library should remain:
 * orthogonal
 * capability-oriented
 
-## Initial Modules
+## Current Modules
 
 ```text
-io
-fs
-str
-net
-json
-time
-proc
-path
-env
+std   — println, print, readln, read, readChar, range
+fs    — read, write, exists, delete
+str   — len, slice
+thread — spawn, join, channel, send, recv
 ```
+
+**`std.range(start, end)`** — Returns a vec of integers from `start` (inclusive) to `end` (exclusive). Returns nil if called with fewer than 2 arguments or if arguments are non-integer. Used with `for` iteration:
+
+```m4
+use std
+
+for n in std.range(0, 10)
+    std.println(n)
+```
+
+Additional modules (`net`, `json`, `time`, `proc`, `path`, `env`) are planned but not yet implemented.
 
 ---
 
 # Features Explicitly Excluded
 
-The following are intentionally excluded from v0.2:
+The following are intentionally excluded from the current language:
 
 * classes
 * inheritance
@@ -452,14 +460,14 @@ The following are intentionally excluded from v0.2:
 # Example Program
 
 ```m4
-use io
+use std
 
 type User
     name str
     age  i32
 
 fun greet(u User)
-    io.println("hello " + u.name)
+    std.println("hello " + u.name)
 
 pub fun main() i32
     let user User = User(
@@ -470,7 +478,7 @@ pub fun main() i32
     greet(user)
 
     for n in [1, 2, 3]
-        io.println(n)
+        std.println(n)
 
     ret 0
 ```
