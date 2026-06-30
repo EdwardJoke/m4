@@ -61,7 +61,7 @@ zig build
 ## CLI
 
 ```
-m4 v0.3.2 — statically typed, AI-native scripting language
+m4 v0.3.3 — statically typed, AI-native scripting language
 
 Usage:
   m4 [flags] <file.m4>          Run file
@@ -86,6 +86,7 @@ Flags:
 
   -o, --output <path>            Output binary path (build only, default: <file>.out)
   --target <arch>                Target architecture for build (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+  -D <level>                     QBE optimization for build (fast|small)
 ```
 
 ## Language Overview
@@ -212,7 +213,7 @@ src/
 
 ## Status
 
-m4 is in **early development** (v0.3.2). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
+m4 is in **early development** (v0.3.3). The core pipeline (scan → parse → type-check → compile → execute) is functional, with a QBE native compilation backend. Expect significant changes and additions.
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker

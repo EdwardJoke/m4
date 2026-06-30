@@ -6,7 +6,7 @@
 
 The language uses 15 keywords, no braces, no semicolons — blocks are defined by indentation (like Python). It features result-based error handling (`res[T E]`), generic containers (`vec[T]`, `map[K V]`, `opt[T]`, `res[T E]`), and a register-based virtual machine.
 
-**Status:** Early development (v0.3.2). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. CLI UX polished — clean error messages without stack traces, `-h`/`--help` support, stdin piping for `lint`. Significant changes expected.
+**Status:** Early development (v0.3.3). Core pipeline (scan → parse → type-check → compile → execute) is functional. QBE native compilation backend is functional. CLI UX polished — clean error messages without stack traces, `-h`/`--help` support, stdin piping for `lint`. Significant changes expected.
 
 ---
 
@@ -66,8 +66,7 @@ source → Scanner → tokens → Parser → AST → Type Checker → Compiler �
 | `src/fmt.zig`            | Canonical AST pretty-printer                                  |
 | `src/error.zig`          | Structured diagnostics (ZON/JSON/YAML) + error code registry  |
 | `src/root.zig`           | Module root: re-exports all public declarations               |
-| `src/stdlib/std.zig`     | `std.println`, `std.print`, `std.readln`, `std.read`, `std.range` |
-| `src/stdlib/io.zig`      | `io.println`, `io.print`, `io.readln`, `io.read`, `io.readChar` |
+| `src/stdlib/std.zig`     | `std.println`, `std.print`, `std.readln`, `std.read`, `std.readChar`, `std.range` |
 | `src/stdlib/thread.zig`  | `thread.spawn`, `thread.join`, `thread.channel`, `thread.send`, `thread.recv` |
 | `src/stdlib/range.zig`   | `range.range` — numeric range generator                       |
 | `src/stdlib/fs.zig`      | `fs.read`, `fs.write`, `fs.exists`, `fs.delete`              |
@@ -179,7 +178,7 @@ From `SPEC.md`:
 
 ---
 
-## Current State (v0.3.2)
+## Current State (v0.3.3)
 
 ### Implemented
 - Scanner, parser, AST, compiler, VM, type checker
@@ -205,7 +204,7 @@ From `SPEC.md`:
 ### Not Yet Implemented
 - Full standard library (`net`, `json`, `time`, etc.)
 - Result type runtime support
-- Modules beyond `std` / `io` / `thread` / `range` / `fs` / `str`
+- Modules beyond `std` / `thread` / `range` / `fs` / `str`
 - AOT compilation / Cranelift JIT backend
 - Ownership-lite memory model
 - Package manager

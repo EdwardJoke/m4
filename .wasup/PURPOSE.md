@@ -1,15 +1,18 @@
-# v0.3.2 Purpose
+# v0.3.3 Purpose
 
 ## What
-Add `-D` flag to m4 CLI to pass QBE optimization levels, and optimize QBE backend with unboxed integer representation.
+Bug-fix release focusing on runtime memory management, QBE backend correctness, parser diagnostics, stdlib cleanup, and test runner stability.
 
 ## Why
-Expose QBE's optimization levels to m4 users, and eliminate heap allocation overhead for integer operations in the QBE native backend by using unboxed ints with native QBE arithmetic ops.
+Address accumulated technical debt and correctness issues discovered during v0.3.2 development. Fix runtime memory leaks, QBE backend state leaks, parser error propagation, and stdlib API issues.
 
 ## Success Criteria
-- [x] CLI accepts `-D` flag and passes it to QBE backend
-- [x] Both `-Dfast` and `-Dsmall` modes produce valid, runnable binaries
-- [x] Help text (`m4 --help`) documents the `-D` option with fast/small descriptions
-- [x] Integer literals emit native QBE `copy` instead of `call $m4_new_int`
-- [x] Binary arithmetic emits native QBE ops (`add`/`sub`/`mul`/`div`) instead of runtime calls
-- [x] All existing tests pass with both bytecode VM and QBE native backend
+- [ ] M1: Fix runtime memory management — shallow teardown in m4_free_value, correct signature, nil-safe div_u/mod_u
+- [ ] M2: Fix qbe_wrap — reset opt before each compilation
+- [ ] M3: Fix QBE backend — track BoxKind instead of bool in ensureBoxed
+- [ ] M4: Fix qbe_build — hash-based runtime object cache
+- [ ] M5: Fix parser — structured diagnostics for lex errors
+- [ ] M6: Fix CLI — improve lint error format
+- [ ] M7: Fix thread — dedicated Value tags for thread_handle and channel
+- [ ] M8: Fix stdlib — resolve @constCast warnings, fix stringBuilder leak
+- [ ] M9: Fix test runner — stable exit code, script portability
