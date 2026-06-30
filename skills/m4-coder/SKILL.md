@@ -46,26 +46,26 @@ fun add(a i32, b i32) i32
     ret a + b
 
 pub fun main() i32
-    io.println(add(3, 4))
+    std.println(add(3, 4))
     ret 0
 ```
 
 ### Control Flow
 ```m4
 if score > 90
-    io.println("A")
+    std.println("A")
 elif score > 80
-    io.println("B")
+    std.println("B")
 else
-    io.println("C")
+    std.println("C")
 
 loop
-    io.println("forever")
+    std.println("forever")
     if stop
         esc
 
 for item in items
-    io.println(item)
+    std.println(item)
 ```
 
 ### Operators
@@ -100,15 +100,14 @@ let val = result?           # error propagation with ?
 
 ### Modules
 ```m4
-use io                     # I/O: println, print, readln, read, readChar
-use std                    # standard library: println, print, readln, read, range, readChar
+use std                    # standard library: println, print, readln, read, readChar, range
 use thread                 # threading: spawn, join, channel, send, recv
 use fs                     # file system: read, write, exists, delete
 use str                    # string utilities: len, slice
 
-io.println("text")         # print with newline
-io.print("no newline")     # print without newline
-std.range(1, 10, 2)        # range: start, end, step
+std.println("text")         # print with newline
+std.print("no newline")     # print without newline
+std.range(1, 10)            # range: start (inclusive), end (exclusive)
 
 fs.read("file.txt")        # read file as string
 fs.write("file.txt", "hi") # write string to file
@@ -119,7 +118,7 @@ str.len("hello")           # 5
 str.slice("hello", 0, 2)   # "he"
 ```
 
-## RE���L / Execute
+## REPL / Execute
 ```
 $ m4 file.m4               # run file
 $ m4 -                     # run from stdin

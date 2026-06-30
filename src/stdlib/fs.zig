@@ -10,10 +10,10 @@ const value = @import("../value.zig");
 
 /// Register all fs module native functions (read, write, exists, delete) with the VM.
 pub fn register(vm: *VM) !void {
-    try vm.registerNative("fs.read", @constCast(@ptrCast(&fsRead)));
-    try vm.registerNative("fs.write", @constCast(@ptrCast(&fsWrite)));
-    try vm.registerNative("fs.exists", @constCast(@ptrCast(&fsExists)));
-    try vm.registerNative("fs.delete", @constCast(@ptrCast(&fsDelete)));
+    try vm.registerNative("fs.read", @ptrCast(@constCast(&fsRead)));
+    try vm.registerNative("fs.write", @ptrCast(@constCast(&fsWrite)));
+    try vm.registerNative("fs.exists", @ptrCast(@constCast(&fsExists)));
+    try vm.registerNative("fs.delete", @ptrCast(@constCast(&fsDelete)));
 }
 
 /// Read the entire contents of a file at the given path. Returns the content as a string, or nil on error.

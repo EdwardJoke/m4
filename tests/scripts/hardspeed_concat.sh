@@ -1,8 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+
 echo "=== m4 (M4 Script) ==="
-time zig-out/bin/m4 tests/bench/hardspeed_concat.m4
+time "$SCRIPT_DIR/zig-out/bin/m4" "$SCRIPT_DIR/tests/bench/hardspeed_concat.m4"
 echo ""
 echo "=== Python ==="
-time python3 tests/bench/hardspeed_concat.py
+time python3 "$SCRIPT_DIR/tests/bench/hardspeed_concat.py"
 echo ""
 echo "=== Bun/TypeScript ==="
-time bun run tests/bench/hardspeed_concat.ts
+time bun run "$SCRIPT_DIR/tests/bench/hardspeed_concat.ts"

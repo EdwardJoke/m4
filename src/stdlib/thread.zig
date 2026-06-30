@@ -28,11 +28,11 @@ const SpawnInfo = struct {
 
 /// Register all thread module native functions (spawn, join, channel, send, recv) with the VM.
 pub fn register(vm: *VM) !void {
-    try vm.registerNative("thread.spawn", @constCast(@ptrCast(&spawnFn)));
-    try vm.registerNative("thread.join", @constCast(@ptrCast(&joinFn)));
-    try vm.registerNative("thread.channel", @constCast(@ptrCast(&channelFn)));
-    try vm.registerNative("thread.send", @constCast(@ptrCast(&sendFn)));
-    try vm.registerNative("thread.recv", @constCast(@ptrCast(&recvFn)));
+    try vm.registerNative("thread.spawn", @ptrCast(@constCast(&spawnFn)));
+    try vm.registerNative("thread.join", @ptrCast(@constCast(&joinFn)));
+    try vm.registerNative("thread.channel", @ptrCast(@constCast(&channelFn)));
+    try vm.registerNative("thread.send", @ptrCast(@constCast(&sendFn)));
+    try vm.registerNative("thread.recv", @ptrCast(@constCast(&recvFn)));
 }
 
 /// Spawn a function in a new thread with up to 8 arguments. Returns a handle (vec) for thread.join.
@@ -68,7 +68,7 @@ fn spawnFn(vm: *VM, args: []const value.Value) value.Value {
     handle.thread = thread;
     handle.result = .nil;
 
-    return .{ .vec = @ptrCast(handle) };
+    return .{ .thread_handle = @ptrCast(handle) };
 }
 
 /// Entry point for a spawned thread. Runs the function with its arguments and stores the result.
@@ -113,9 +113,9 @@ fn threadEntry(info: *SpawnInfo) void {
 /// Join a spawned thread and return its result. Blocks until the thread completes.
 fn joinFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
-    if (args[0] != .vec) return .nil;
+    if (args[0] != .thread_handle) return .nil;
 
-    const handle: *ThreadHandleObj = @ptrCast(@alignCast(args[0].vec));
+    const handle: *ThreadHandleObj = @ptrCast(@alignCast(args[0].thread_handle));
     handle.thread.join();
     return handle.result;
 }
@@ -129,15 +129,15 @@ fn channelFn(vm: *VM, _: []const value.Value) value.Value {
         .tail = 0,
         .closed = 0,
     };
-    return .{ .vec = @ptrCast(ch) };
+    return .{ .channel = @ptrCast(ch) };
 }
 
 /// Send a value into a channel. Blocks if full. Returns true on success, false if closed.
 fn sendFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 2) return .{ .bool = false };
-    if (args[0] != .vec) return .{ .bool = false };
+    if (args[0] != .channel) return .{ .bool = false };
 
-    const ch: *ChannelObj = @ptrCast(@alignCast(args[0].vec));
+    const ch: *ChannelObj = @ptrCast(@alignCast(args[0].channel));
     const val = args[1];
 
     while (true) {
@@ -161,9 +161,9 @@ fn sendFn(_: *VM, args: []const value.Value) value.Value {
 /// Receive a value from a channel. Blocks if empty. Returns nil if channel is closed and empty.
 fn recvFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
-    if (args[0] != .vec) return .nil;
+    if (args[0] != .channel) return .nil;
 
-    const ch: *ChannelObj = @ptrCast(@alignCast(args[0].vec));
+    const ch: *ChannelObj = @ptrCast(@alignCast(args[0].channel));
 
     while (true) {
         const head = @atomicLoad(usize, &ch.head, .acquire);

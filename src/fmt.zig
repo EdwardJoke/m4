@@ -176,8 +176,18 @@ fn writeIndent(indent: u32) void {
 
 fn opStr(op: ast.BinaryOp) []const u8 {
     return switch (op) {
-        .add => "+", .sub => "-", .mul => "*", .div => "/", .mod => "%",
-        .eq => "==", .neq => "!=", .gt => ">", .lt => "<", .gte => ">=", .lte => "<=",
-        .and_ => "&&", .or_ => "||",
+        .add => "+",
+        .sub => "-",
+        .mul => "*",
+        .div => "/",
+        .mod => "%",
+        .eq => "==",
+        .neq => "!=",
+        .gt => ">",
+        .lt => "<",
+        .gte => ">=",
+        .lte => "<=",
+        .and_ => "&&",
+        .or_ => "||",
     };
 }

@@ -274,8 +274,8 @@ int64_t m4_neg(int64_t a) {
 int64_t m4_add_u(int64_t a, int64_t b) { return a + b; }
 int64_t m4_sub_u(int64_t a, int64_t b) { return a - b; }
 int64_t m4_mul_u(int64_t a, int64_t b) { return a * b; }
-int64_t m4_div_u(int64_t a, int64_t b) { if (b == 0) return 0; return a / b; }
-int64_t m4_mod_u(int64_t a, int64_t b) { if (b == 0) return 0; return a % b; }
+int64_t m4_div_u(int64_t a, int64_t b) { if (b == 0) return (int64_t)(void*)&m4_nil; return m4_box_int(a / b); }
+int64_t m4_mod_u(int64_t a, int64_t b) { if (b == 0) return (int64_t)(void*)&m4_nil; return m4_box_int(a % b); }
 int64_t m4_neg_u(int64_t a) { return -a; }
 int64_t m4_not_u(int64_t a) { return !a; }
 
@@ -366,25 +366,21 @@ int64_t m4_is_truthy(int64_t val) {
 // ─── Memory Management ─────────────────────────────────────────────────────
 
 /// Free an M4Value and any heap-allocated data it owns. Does nothing for nil.
-void m4_free_value(int64_t val) {
-    if (!val) return;
-    if ((void*)val == (void*)&m4_nil) return;
-    M4Value *v = (M4Value*)(void*)val;
+void m4_free_value(M4Value *v) {
+    if (!v) return;
+    if (v == &m4_nil) return;
     switch (v->tag) {
         case M4_STRING:
             free(v->s.data);
             break;
         case M4_VEC:
-            for (int64_t i = 0; i < v->v.len; i++) {
-                m4_free_value((int64_t)(void*)v->v.items[i]);
-            }
+            // Shallow teardown — vec items are raw M4Value* pointers
+            // that may be aliased across containers; don't double-free.
             free(v->v.items);
             break;
         case M4_STRUCT:
-            for (int64_t i = 0; i < v->o.count; i++) {
-                m4_free_value((int64_t)(void*)v->o.fields[i]);
-            }
             free(v->o.fields);
+            // Struct field names are borrowed references (not heap-allocated copies)
             free(v->o.names);
             break;
         default:

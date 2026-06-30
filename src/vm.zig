@@ -84,7 +84,8 @@ pub fn registerNative(self: *VM, name: []const u8, ptr: *anyopaque) !void {
 pub fn interpret(self: *VM, chunk: *const Chunk) !void {
     self.chunk = chunk;
     self.pc = 0;
-    self.frame_count = 1;        self.frames[0] = .{ .chunk = chunk, .code = chunk.code.items, .constants = chunk.constants.items, .pc = 0, .base_reg = 0, .ret_pc = 0, .ret_dst = 0 };
+    self.frame_count = 1;
+    self.frames[0] = .{ .chunk = chunk, .code = chunk.code.items, .constants = chunk.constants.items, .pc = 0, .base_reg = 0, .ret_pc = 0, .ret_dst = 0 };
     return self.run();
 }
 
@@ -153,6 +154,8 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
         .string_builder => false,
         .@"fn" => a.@"fn" == b.@"fn",
         .fun_obj => a.fun_obj == b.fun_obj,
+        .thread_handle => a.thread_handle == b.thread_handle,
+        .channel => a.channel == b.channel,
         .vec => a.vec == b.vec,
     };
 }
@@ -461,7 +464,7 @@ pub fn run(self: *VM) !void {
                             self.registers[arg_reg] = .{ .string = sb.buf.items };
                         }
                     }
-                    const result = native(self, self.registers[(base + dec.b + 1) .. (base + dec.b + 1 + dec.c)]);
+                    const result = native(self, self.registers[(base + dec.b + 1)..(base + dec.b + 1 + dec.c)]);
                     self.registers[base + dec.a] = result;
                     pc += 1;
                 } else {
@@ -754,7 +757,9 @@ fn cmpValues(l: Value.Value, r: Value.Value) !std.math.Order {
     };
 }
 
-const VecObj = struct { items: std.ArrayList(Value.Value), };
+const VecObj = struct {
+    items: std.ArrayList(Value.Value),
+};
 
 test "vm: string equality comparison" {
     var chunk = Chunk.init(std.testing.allocator);

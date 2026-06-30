@@ -8,7 +8,7 @@ const VecObj = struct {
 
 /// Register the range.range native function with the VM.
 pub fn register(vm: *VM) !void {
-    try vm.registerNative("range.range", @constCast(@ptrCast(&range)));
+    try vm.registerNative("range.range", @ptrCast(@constCast(&range)));
 }
 
 /// Generate a vec of integers from start (inclusive) to end (exclusive). Returns nil on bad args.

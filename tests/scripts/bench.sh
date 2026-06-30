@@ -61,17 +61,17 @@ run_hyperfine() {
     local labels=()
 
     if [ -f "$PROJECT_DIR/$m4_file" ]; then
-        cmds+=("$M4_BIN $PROJECT_DIR/$m4_file > /dev/null 2>&1")
+        cmds+=("$M4_BIN \"$PROJECT_DIR/$m4_file\" > /dev/null 2>&1")
         labels+=("m4 (VM)")
     fi
 
     if command -v python3 &>/dev/null; then
-        cmds+=("python3 $PROJECT_DIR/$py_file > /dev/null 2>&1")
+        cmds+=("python3 \"$PROJECT_DIR/$py_file\" > /dev/null 2>&1")
         labels+=("Python 3")
     fi
 
     if command -v bun &>/dev/null; then
-        cmds+=("bun run $PROJECT_DIR/$ts_file > /dev/null 2>&1")
+        cmds+=("bun run \"$PROJECT_DIR/$ts_file\" > /dev/null 2>&1")
         labels+=("Bun/TS")
     fi
 
@@ -95,11 +95,12 @@ import json
 with open('$json_out') as f:
     data = json.load(f)
 results = data.get('results', [])
+m4_bin = '$M4_BIN'
 if results:
     m4_time = None
     for r in results:
         cmd = r.get('command', '')
-        if 'm4' in cmd:
+        if cmd.startswith(m4_bin):
             m4_time = r['mean']
     print('  {:<25s} {:>10s} {:>12s}'.format('Runtime', 'Time', 'Ratio'))
     print('  {:<25s} {:>10s} {:>12s}'.format('-------', '----', '-----'))
@@ -108,7 +109,12 @@ if results:
         mean = r['mean'] * 1000
         stddev = r['stddev'] * 1000
         ratio = '{:.2f}x'.format(mean / (m4_time * 1000)) if m4_time and mean > 0 else '1.00x'
-        label = 'm4 (VM)' if 'm4' in cmd else ('Python 3' if 'python3' in cmd else 'Bun/TS')
+        if cmd.startswith(m4_bin):
+            label = 'm4 (VM)'
+        elif 'python3' in cmd:
+            label = 'Python 3'
+        else:
+            label = 'Bun/TS'
         print('  {:<25s} {:6.1f}ms +/-{:4.1f}ms {:>10s}'.format(label, mean, stddev, ratio))
 " 2>&1 || echo "  (parse complete)"
     fi

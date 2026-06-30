@@ -1,5 +1,6 @@
 const zig_std = @import("std");
 const posix = zig_std.posix;
+const Io = zig_std.Io;
 const VM = @import("../vm.zig");
 const value = @import("../value.zig");
 
@@ -9,18 +10,20 @@ const VecObj = struct {
 
 /// Register all std module native functions (println, print, readln, read, readChar, range) with the VM.
 pub fn register(vm: *VM) !void {
-    try vm.registerNative("std.println", @constCast(@ptrCast(&println)));
-    try vm.registerNative("std.print", @constCast(@ptrCast(&print)));
-    try vm.registerNative("std.readln", @constCast(@ptrCast(&readln)));
-    try vm.registerNative("std.read", @constCast(@ptrCast(&readAll)));
-    try vm.registerNative("std.readChar", @constCast(@ptrCast(&readChar)));
-    try vm.registerNative("std.range", @constCast(@ptrCast(&range)));
+    try vm.registerNative("std.println", @ptrCast(@constCast(&println)));
+    try vm.registerNative("std.print", @ptrCast(@constCast(&print)));
+    try vm.registerNative("std.readln", @ptrCast(@constCast(&readln)));
+    try vm.registerNative("std.read", @ptrCast(@constCast(&readAll)));
+    try vm.registerNative("std.readChar", @ptrCast(@constCast(&readChar)));
+    try vm.registerNative("std.range", @ptrCast(@constCast(&range)));
 }
 
 /// Print each argument to stdout followed by a newline. Returns nil.
 fn println(_: *VM, args: []const value.Value) value.Value {
     for (args) |arg| writeValue(arg);
-    zig_std.debug.print("\n", .{});
+    const io = Io.Threaded.global_single_threaded.io();
+    const out = Io.File.stdout();
+    Io.File.writeStreamingAll(out, io, "\n") catch {};
     return .nil;
 }
 
@@ -49,7 +52,10 @@ fn readln(vm: *VM, _: []const value.Value) value.Value {
     }
     // Copy to an independently-owned allocation and track it in the VM
     const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
-    vm.allocated_strings.append(vm.allocator, str) catch {};
+    vm.allocated_strings.append(vm.allocator, str) catch {
+        vm.allocator.free(str);
+        return .nil;
+    };
     return .{ .string = str };
 }
 
@@ -71,7 +77,10 @@ fn readAll(vm: *VM, _: []const value.Value) value.Value {
     }
     // Copy to an independently-owned allocation and track it in the VM
     const str = vm.allocator.dupe(u8, buf.items) catch return .nil;
-    vm.allocated_strings.append(vm.allocator, str) catch {};
+    vm.allocated_strings.append(vm.allocator, str) catch {
+        vm.allocator.free(str);
+        return .nil;
+    };
     return .{ .string = str };
 }
 
@@ -128,13 +137,17 @@ fn range(vm: *VM, args: []const value.Value) value.Value {
 }
 
 fn writeValue(arg: value.Value) void {
-    switch (arg) {
-        .int => |i| zig_std.debug.print("{d}", .{i}),
-        .float => |f| zig_std.debug.print("{d}", .{f}),
-        .bool => |b| zig_std.debug.print("{}", .{b}),
-        .string => |s| zig_std.debug.print("{s}", .{s}),
-        .nil => zig_std.debug.print("nil", .{}),
-        .char => |c| zig_std.debug.print("{u}", .{c}),
-        else => zig_std.debug.print("<value>", .{}),
-    }
+    var buf: [256]u8 = undefined;
+    const s = switch (arg) {
+        .int => |i| zig_std.fmt.bufPrint(&buf, "{d}", .{i}) catch " overflow",
+        .float => |f| zig_std.fmt.bufPrint(&buf, "{d}", .{f}) catch " overflow",
+        .bool => |b| zig_std.fmt.bufPrint(&buf, "{}", .{b}) catch " overflow",
+        .string => |s| s,
+        .nil => "nil",
+        .char => |c| zig_std.fmt.bufPrint(&buf, "{u}", .{c}) catch " overflow",
+        else => "<value>",
+    };
+    const io = Io.Threaded.global_single_threaded.io();
+    const out = Io.File.stdout();
+    Io.File.writeStreamingAll(out, io, s) catch {};
 }

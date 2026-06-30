@@ -139,11 +139,10 @@ for entry in "${TESTS[@]}"; do
     # Run the test, capturing stdout and stderr
     # Special case: string_test.m4 has std.readln() — pipe input to it
     if [ "$filename" = "string_test" ]; then
-        output=$(echo "test_input" | "$M4_BIN" "$test_file" 2>&1) || true
+        output=$(echo "test_input" | "$M4_BIN" "$test_file" 2>&1) && exit_code=0 || exit_code=$?
     else
-        output=$("$M4_BIN" "$test_file" 2>&1) || true
+        output=$("$M4_BIN" "$test_file" 2>&1) && exit_code=0 || exit_code=$?
     fi
-    exit_code=$?
 
     if [ "$exit_code" -ne 0 ]; then
         fail "$filename.m4" "Exit code $exit_code"

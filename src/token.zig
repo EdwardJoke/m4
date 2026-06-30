@@ -84,9 +84,21 @@ pub const Token = struct {
 /// Returns true if the token tag is a keyword.
 pub fn isKeyword(tag: Tag) bool {
     return switch (tag) {
-        .kw_let, .kw_mut, .kw_fun, .kw_pub,
-        .kw_if, .kw_elif, .kw_else, .kw_loop, .kw_for,
-        .kw_continue, .kw_esc, .kw_ret, .kw_nil, .kw_use, .kw_type,
+        .kw_let,
+        .kw_mut,
+        .kw_fun,
+        .kw_pub,
+        .kw_if,
+        .kw_elif,
+        .kw_else,
+        .kw_loop,
+        .kw_for,
+        .kw_continue,
+        .kw_esc,
+        .kw_ret,
+        .kw_nil,
+        .kw_use,
+        .kw_type,
         => true,
         else => false,
     };

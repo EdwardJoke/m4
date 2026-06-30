@@ -44,7 +44,7 @@ pub const DiagnosticList = struct {
     error_count: u32 = 0,
     warning_count: u32 = 0,
 
-        /// Create an empty diagnostic list.
+    /// Create an empty diagnostic list.
     pub fn init() DiagnosticList {
         return .{};
     }

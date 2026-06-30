@@ -72,6 +72,7 @@ pub fn parse(self: *Parser) ![]const usize {
         }
         self.skipNewlines();
     }
+    if (self.had_error) return error.ParseError;
     return stmts.toOwnedSlice(self.allocator);
 }
 
@@ -363,7 +364,18 @@ fn advanceRaw(self: *Parser) void {
         self.current = self.scanner.nextToken();
         if (self.current.tag != .hash and self.current.tag != .err and self.current.tag != .newline) break;
         if (self.current.tag == .err) {
-            std.debug.print("[line {d}] Lex error\n", .{self.current.line});
+            self.had_error = true;
+            const msg = self.current.start;
+            if (self.diag) |diag| {
+                diag.add(self.allocator, .{
+                    .severity = .@"error",
+                    .code = "p001",
+                    .message = msg,
+                    .location = .{ .file = "<source>", .line = self.current.line, .column = 0 },
+                }) catch {};
+            } else {
+                err.printDiagnostic("p001", "Lex Error", msg, self.current.line);
+            }
         }
     }
 }
@@ -374,7 +386,18 @@ fn advance(self: *Parser) void {
         self.current = self.scanner.nextToken();
         if (self.current.tag != .hash and self.current.tag != .err and self.current.tag != .newline) break;
         if (self.current.tag == .err) {
-            std.debug.print("[line {d}] Lex error\n", .{self.current.line});
+            self.had_error = true;
+            const msg = self.current.start;
+            if (self.diag) |diag| {
+                diag.add(self.allocator, .{
+                    .severity = .@"error",
+                    .code = "p001",
+                    .message = msg,
+                    .location = .{ .file = "<source>", .line = self.current.line, .column = 0 },
+                }) catch {};
+            } else {
+                err.printDiagnostic("p001", "Lex Error", msg, self.current.line);
+            }
         }
     }
 }
@@ -734,4 +757,40 @@ test "parser: ret statement" {
         .ret_stmt => |v| try std.testing.expect(v != null),
         else => unreachable,
     }
+}
+
+test "parser: EOF in consumeIdent remaps to p002" {
+    var diag = err.DiagnosticList.init();
+    defer diag.deinit(std.testing.allocator);
+    var p = Parser.init(std.testing.allocator, "fun");
+    p.diag = &diag;
+    defer p.deinit();
+    try std.testing.expectError(error.ParseError, p.parse());
+    try std.testing.expect(diag.hasErrors());
+    try std.testing.expectEqual(@as(usize, 1), diag.items().len);
+    try std.testing.expectEqualStrings("p002", diag.items()[0].code);
+}
+
+test "parser: EOF in consume remaps to p002" {
+    var diag = err.DiagnosticList.init();
+    defer diag.deinit(std.testing.allocator);
+    var p = Parser.init(std.testing.allocator, "fun foo");
+    p.diag = &diag;
+    defer p.deinit();
+    try std.testing.expectError(error.ParseError, p.parse());
+    try std.testing.expect(diag.hasErrors());
+    try std.testing.expectEqual(@as(usize, 1), diag.items().len);
+    try std.testing.expectEqualStrings("p002", diag.items()[0].code);
+}
+
+test "parser: invalid integer literal produces p004" {
+    var diag = err.DiagnosticList.init();
+    defer diag.deinit(std.testing.allocator);
+    var p = Parser.init(std.testing.allocator, "9999999999999999999");
+    p.diag = &diag;
+    defer p.deinit();
+    try std.testing.expectError(error.ParseError, p.parse());
+    try std.testing.expect(diag.hasErrors());
+    try std.testing.expectEqual(@as(usize, 1), diag.items().len);
+    try std.testing.expectEqualStrings("p004", diag.items()[0].code);
 }
