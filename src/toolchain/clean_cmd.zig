@@ -3,24 +3,15 @@ const Io = std.Io;
 
 pub fn run(io: Io, allocator: std.mem.Allocator, args: []const []const u8) !void {
     _ = args;
-    var result = try std.process.run(allocator, io, .{
-        .argv = &[_][]const u8{ "rm", "-rf", ".m4_cache" },
-    });
-    allocator.free(result.stdout);
-    allocator.free(result.stderr);
+    _ = allocator;
+    const cwd = std.Io.Dir.cwd();
+
+    std.Io.Dir.deleteTree(cwd, io, ".m4_cache") catch {};
     std.debug.print("mein clean: removed .m4_cache\n", .{});
 
-    result = try std.process.run(allocator, io, .{
-        .argv = &[_][]const u8{ "rm", "-rf", "zig-out" },
-    });
-    allocator.free(result.stdout);
-    allocator.free(result.stderr);
+    std.Io.Dir.deleteTree(cwd, io, "zig-out") catch {};
     std.debug.print("mein clean: removed zig-out/\n", .{});
 
-    result = try std.process.run(allocator, io, .{
-        .argv = &[_][]const u8{ "rm", "-rf", ".zig-cache" },
-    });
-    allocator.free(result.stdout);
-    allocator.free(result.stderr);
+    std.Io.Dir.deleteTree(cwd, io, ".zig-cache") catch {};
     std.debug.print("mein clean: removed .zig-cache\n", .{});
 }

@@ -476,19 +476,18 @@ pub fn run(self: *VM) !void {
                 }
             },
             .ret => {
+                const d = OpCode.decodeAx(inst);
+                const ret_val = self.registers[base + d];
+                const ret_dst = frame.ret_dst;
                 if (self.frame_count > 1) {
-                    const d = OpCode.decodeAx(inst);
-                    const ret_val = self.registers[base + d];
-                    const ret_dst = frame.ret_dst;
                     self.frame_count -= 1;
                     frame = &self.frames[self.frame_count - 1];
                     code = frame.code;
                     constants = frame.constants;
                     pc = frame.pc;
-                    self.registers[ret_dst] = ret_val;
-                } else {
-                    return;
                 }
+                self.registers[ret_dst] = ret_val;
+                if (self.frame_count == 1) return;
             },
 
             .new_vec => {

@@ -36,18 +36,18 @@ pub fn register(vm: *VM) !void {
 }
 
 /// Spawn a function in a new thread with up to 8 arguments. Returns a handle (vec) for thread.join.
-fn spawnFn(vm: *VM, args: []const value.Value) value.Value {
+fn spawnFn(_: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     if (args[0] != .fun_obj) return .nil;
 
-    const handle = vm.allocator.create(ThreadHandleObj) catch return .nil;
-    errdefer vm.allocator.destroy(handle);
+    const handle = std.heap.page_allocator.create(ThreadHandleObj) catch return .nil;
+    errdefer std.heap.page_allocator.destroy(handle);
 
     const extra_args = args[1..];
     const arg_count = @min(extra_args.len, 8);
 
     const info = std.heap.page_allocator.create(SpawnInfo) catch {
-        vm.allocator.destroy(handle);
+        std.heap.page_allocator.destroy(handle);
         return .nil;
     };
 
@@ -61,7 +61,7 @@ fn spawnFn(vm: *VM, args: []const value.Value) value.Value {
 
     const thread = std.Thread.spawn(.{}, threadEntry, .{info}) catch {
         std.heap.page_allocator.destroy(info);
-        vm.allocator.destroy(handle);
+        std.heap.page_allocator.destroy(handle);
         return .nil;
     };
 
@@ -105,19 +105,23 @@ fn threadEntry(info: *SpawnInfo) void {
 
     child_vm.run() catch {};
 
-    info.handle.result = child_vm.registers[0];
+    info.handle.result = cloneValue(child_vm.registers[0], std.heap.page_allocator);
 
     std.heap.page_allocator.destroy(info);
 }
 
 /// Join a spawned thread and return its result. Blocks until the thread completes.
-fn joinFn(_: *VM, args: []const value.Value) value.Value {
+fn joinFn(vm: *VM, args: []const value.Value) value.Value {
     if (args.len < 1) return .nil;
     if (args[0] != .thread_handle) return .nil;
 
     const handle: *ThreadHandleObj = @ptrCast(@alignCast(args[0].thread_handle));
     handle.thread.join();
-    return handle.result;
+
+    const result = cloneValue(handle.result, vm.allocator);
+    destroyValue(handle.result, std.heap.page_allocator);
+    std.heap.page_allocator.destroy(handle);
+    return result;
 }
 
 /// Create a new channel for inter-thread message passing (capacity: 64).
@@ -177,5 +181,83 @@ fn recvFn(_: *VM, args: []const value.Value) value.Value {
         const val = ch.buf[head];
         @atomicStore(usize, &ch.head, (head + 1) % CHANNEL_CAP, .release);
         return val;
+    }
+}
+
+/// Deep-clone a value's heap-backed data into the given allocator.
+/// Returns a value whose heap data is owned by the allocator.
+fn cloneValue(val: value.Value, allocator: std.mem.Allocator) value.Value {
+    return switch (val) {
+        .string => |s| .{
+            .string = allocator.dupe(u8, s) catch return .nil,
+        },
+        .vec => |v| {
+            const VecObj = @import("../compiler/object.zig").VecObj;
+            const old: *VecObj = @ptrCast(@alignCast(v));
+            const new = allocator.create(VecObj) catch return .nil;
+            new.* = .{ .items = std.ArrayList(value.Value).initCapacity(allocator, old.items.items.len) catch return .nil };
+            for (old.items.items) |item| {
+                new.items.appendAssumeCapacity(cloneValue(item, allocator));
+            }
+            return .{ .vec = @ptrCast(new) };
+        },
+        .struct_obj => |s| {
+            const StructObj = @import("../compiler/object.zig").StructObj;
+            const old: *StructObj = @ptrCast(@alignCast(s));
+            const new = allocator.create(StructObj) catch return .nil;
+            new.* = .{ .fields = std.StringHashMap(value.Value).init(allocator) };
+            var it = old.fields.iterator();
+            while (it.next()) |entry| {
+                const key = allocator.dupe(u8, entry.key_ptr.*) catch return .nil;
+                const entry_val = cloneValue(entry.value_ptr.*, allocator);
+                new.fields.put(key, entry_val) catch return .nil;
+            }
+            return .{ .struct_obj = @ptrCast(new) };
+        },
+        .string_builder => |sb| {
+            const StringBuilderObj = @import("../compiler/object.zig").StringBuilderObj;
+            const old: *StringBuilderObj = @ptrCast(@alignCast(sb));
+            const new = allocator.create(StringBuilderObj) catch return .nil;
+            new.* = .{ .buf = std.ArrayList(u8).initCapacity(allocator, old.buf.items.len) catch return .nil };
+            new.buf.appendSliceAssumeCapacity(old.buf.items);
+            return .{ .string_builder = @ptrCast(new) };
+        },
+        else => val,
+    };
+}
+
+/// Free heap-backed data referenced by a value, previously cloned with cloneValue.
+fn destroyValue(val: value.Value, allocator: std.mem.Allocator) void {
+    switch (val) {
+        .string => |s| {
+            if (s.len > 0) allocator.free(s);
+        },
+        .vec => |v| {
+            const VecObj = @import("../compiler/object.zig").VecObj;
+            const obj: *VecObj = @ptrCast(@alignCast(v));
+            for (obj.items.items) |item| {
+                destroyValue(item, allocator);
+            }
+            obj.items.deinit(allocator);
+            allocator.destroy(obj);
+        },
+        .struct_obj => |s| {
+            const StructObj = @import("../compiler/object.zig").StructObj;
+            const obj: *StructObj = @ptrCast(@alignCast(s));
+            var it = obj.fields.iterator();
+            while (it.next()) |entry| {
+                if (entry.key_ptr.*.len > 0) allocator.free(entry.key_ptr.*);
+                destroyValue(entry.value_ptr.*, allocator);
+            }
+            obj.fields.deinit();
+            allocator.destroy(obj);
+        },
+        .string_builder => |sb| {
+            const StringBuilderObj = @import("../compiler/object.zig").StringBuilderObj;
+            const obj: *StringBuilderObj = @ptrCast(@alignCast(sb));
+            obj.buf.deinit(allocator);
+            allocator.destroy(obj);
+        },
+        else => {},
     }
 }

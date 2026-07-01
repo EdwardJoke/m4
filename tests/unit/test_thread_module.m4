@@ -93,6 +93,8 @@ fun test_channel_different_types() i32
     std.print("bool: ")
     std.println(r3)
 
+    ret 0
+
 fun channel_worker(ch) i32
     thread.send(ch, 42)
     thread.send(ch, 99)
