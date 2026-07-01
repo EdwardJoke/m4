@@ -20,7 +20,7 @@ m4 是一门用 Zig 实现的极简脚本语言，包含手写词法分析器、
 - **仅 15 个关键字** — 最小语法，最小语法熵
 - **基于 Result 的错误处理** — `res[T E]` 类型配合 `?` 传播运算符
 - **结构化错误输出** — 支持 ZON、JSON 或 YAML 格式的诊断信息
-- **32 个错误码** — 通过 `m4 explain <code>` 提供可读的诊断说明
+- **32 个错误码** — 通过 `m4c explain <code>` 提供可读的诊断说明
 - **彩色错误输出** — `--pretty` 标志提供终端友好的彩色诊断
 
 ## 快速开始
@@ -51,27 +51,27 @@ echo 'std.println(42)' | zig build run -- -
 
 # 或者构建后直接使用二进制文件
 zig build
-./zig-out/bin/m4 hello.m4
+./zig-out/bin/m4c hello.m4
 ```
 
 ## CLI
 
 ```
-m4 v0.3.3 — 静态类型、AI 原生脚本语言
+m4c v0.3.3 — 静态类型、AI 原生脚本语言
 
 用法：
-  m4 [flags] <file.m4>          运行文件
-  m4 [flags] -                  从标准输入运行
-  m4                            启动 REPL
+  m4c [flags] <file.m4>          运行文件
+  m4c [flags] -                  从标准输入运行
+  m4c                            启动 REPL
 
 命令：
-  m4 help [--zon|--json|--yaml]    显示帮助信息
-  m4 version [--zon|--json|--yaml] 显示版本
-  m4 lint <file.m4>                仅进行解析和类型检查
-  m4 build <file.m4> [opts]        编译为本地二进制文件
-  m4 explain <code>                解释错误码的含义
+  m4c help [--zon|--json|--yaml]    显示帮助信息
+  m4c version [--zon|--json|--yaml] 显示版本
+  m4c lint <file.m4>                仅进行解析和类型检查
+  m4c build <file.m4> [opts]        编译为本地二进制文件
+  m4c explain <code>                解释错误码的含义
 
-使用 'm4 <command> help' 查看命令特定帮助（例如 'm4 lint help --zon'）。
+使用 'm4c <command> help' 查看命令特定帮助（例如 'm4c lint help --zon'）。
 
 标志：
   -d, --debug                    执行前显示字节码

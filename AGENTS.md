@@ -195,7 +195,7 @@ From `SPEC.md`:
 - Canonical formatter
 - Bytecode disassembler
 - Structured diagnostics (ZON, JSON, YAML)
-- Error code explainer (`m4 explain r001`)
+- Error code explainer (`m4c explain r001`)
 - Threading primitives (`thread.spawn`, `thread.join`, channels)
 - File system module (`fs.read`, `fs.write`, `fs.exists`, `fs.delete`)
 - String utilities module (`str.len`, `str.slice`)

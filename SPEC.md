@@ -720,7 +720,7 @@ Planned future modules (`net`, `json`, `time`, `proc`, `path`, `env`) are not ye
 # Error Codes Reference
 
 All diagnostic errors use a structured code format: `[{code}] {Stage}: {message}`.
-Codes are grouped by pipeline stage and can be looked up with `m4 explain <code>`.
+Codes are grouped by pipeline stage and can be looked up with `m4c explain <code>`.
 
 ## Parse Errors
 
@@ -781,11 +781,11 @@ Codes are grouped by pipeline stage and can be looked up with `m4 explain <code>
 
 ```bash
 # Look up an error code's description
-m4 explain r006
+m4c explain r006
 
 # Get structured output
-m4 explain t001 --format json
-m4 explain p002 --format yaml
+m4c explain t001 --format json
+m4c explain p002 --format yaml
 ```
 
 ---

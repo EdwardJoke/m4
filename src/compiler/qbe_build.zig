@@ -105,7 +105,7 @@ pub fn buildNative(
 
     const qbe_result = qbe_compile_ssa(ssa_path_z, asm_path_z, target_z, qbe_opt_ptr);
     if (qbe_result != 0) {
-        std.debug.print("m4 build: QBE compilation failed (error {d})\n", .{qbe_result});
+        std.debug.print("m4c build: QBE compilation failed (error {d})\n", .{qbe_result});
         return error.QbeCompileError;
     }
 
@@ -135,7 +135,7 @@ pub fn buildNative(
                 allocator.free(result.stderr);
             }
             if (result.term != .exited or result.term.exited != 0) {
-                std.debug.print("m4 build: runtime compilation failed\n{s}\n", .{result.stderr});
+                std.debug.print("m4c build: runtime compilation failed\n{s}\n", .{result.stderr});
                 return error.RuntimeCompileError;
             }
         }
@@ -174,7 +174,7 @@ pub fn buildNative(
             allocator.free(result.stderr);
         }
         if (result.term != .exited or result.term.exited != 0) {
-            std.debug.print("m4 build: assembly/linking failed\n{s}\n", .{result.stderr});
+            std.debug.print("m4c build: assembly/linking failed\n{s}\n", .{result.stderr});
             return error.CompileLinkError;
         }
     }
