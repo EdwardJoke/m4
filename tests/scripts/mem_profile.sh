@@ -6,7 +6,7 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-M4_BIN="$PROJECT_DIR/zig-out/bin/m4"
+M4_BIN="$PROJECT_DIR/zig-out/bin/m4c"
 
 echo ""
 echo "============================================================"

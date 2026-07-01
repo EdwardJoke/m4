@@ -9,6 +9,6 @@ The `m4` command should be minimal — only contain compiler functionality. Tool
 ## Success Criteria
 - [ ] Separate non-compiler functions from `m4` command, move them to `mein` (the separated toolchain manager)
 - [ ] Rename `m4` to `m4c`
-- [ ] `m4 new project` / `m4 init project` scaffolding working
-- [ ] `m4 clean cache` working
+- [x] `mein new project` / `mein init project` scaffolding working
+- [x] `mein clean cache` working
 - [ ] Codebase restructured: `src/compiler/` + `src/toolchain/`, `build.zig` builds both

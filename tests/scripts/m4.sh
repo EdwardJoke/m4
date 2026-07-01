@@ -1,1 +1,1 @@
-zig-out/bin/m4 tests/bench/hardspeed.m4
+zig-out/bin/m4c tests/bench/hardspeed.m4
