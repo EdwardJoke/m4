@@ -146,6 +146,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Pass version from build.zig.zon to the mein executable
+    const mein_version_opts = b.addOptions();
+    mein_version_opts.addOption([]const u8, "version", zon.version);
+    mein_mod.addImport("build_options", mein_version_opts.createModule());
+
     const mein_exe = b.addExecutable(.{
         .name = "mein",
         .root_module = mein_mod,
