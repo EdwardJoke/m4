@@ -1,8 +1,8 @@
 const zig_std = @import("std");
 const posix = zig_std.posix;
 const Io = zig_std.Io;
-const VM = @import("../vm.zig");
-const value = @import("../value.zig");
+const VM = @import("../compiler/vm.zig");
+const value = @import("../compiler/value.zig");
 
 const VecObj = struct {
     items: zig_std.ArrayList(value.Value),

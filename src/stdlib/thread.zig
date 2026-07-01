@@ -1,7 +1,7 @@
 const std = @import("std");
-const VM = @import("../vm.zig");
-const value = @import("../value.zig");
-const object = @import("../object.zig");
+const VM = @import("../compiler/vm.zig");
+const value = @import("../compiler/value.zig");
+const object = @import("../compiler/object.zig");
 const m4_std = @import("std.zig");
 
 // Channel capacity for message passing between threads.

@@ -3,10 +3,10 @@ const Parser = @import("parser.zig").Parser;
 const qbe = @import("qbe.zig");
 
 /// Embedded m4rt.c source code — embedded at compile time via @embedFile.
-const m4rt_c_src = @embedFile("runtime/m4rt.c");
+const m4rt_c_src = @embedFile("../runtime/m4rt.c");
 
 /// Embedded m4rt.h source code — embedded at compile time via @embedFile.
-const m4rt_h_src = @embedFile("runtime/m4rt.h");
+const m4rt_h_src = @embedFile("../runtime/m4rt.h");
 
 /// Results from a native build.
 pub const BuildResult = struct {

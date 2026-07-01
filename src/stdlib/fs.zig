@@ -5,8 +5,8 @@ const c = @cImport({
     @cInclude("sys/stat.h");
 });
 
-const VM = @import("../vm.zig");
-const value = @import("../value.zig");
+const VM = @import("../compiler/vm.zig");
+const value = @import("../compiler/value.zig");
 
 /// Register all fs module native functions (read, write, exists, delete) with the VM.
 pub fn register(vm: *VM) !void {

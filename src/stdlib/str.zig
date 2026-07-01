@@ -1,6 +1,6 @@
 const zig_std = @import("std");
-const VM = @import("../vm.zig");
-const value = @import("../value.zig");
+const VM = @import("../compiler/vm.zig");
+const value = @import("../compiler/value.zig");
 
 /// Register all str module native functions (len, slice) with the VM.
 pub fn register(vm: *VM) !void {
