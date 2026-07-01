@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const init_cmd = @import("init_cmd.zig");
 const clean_cmd = @import("clean_cmd.zig");
+const completions_cmd = @import("completions_cmd.zig");
 
 const VERSION = "0.4.0";
 
@@ -24,6 +25,12 @@ const commands = [_]Command{
         .aliases = &.{},
         .runFn = clean_cmd.run,
         .description = "Clean build artifacts and caches",
+    },
+    .{
+        .name = "completions",
+        .aliases = &.{},
+        .runFn = completions_cmd.run,
+        .description = "Generate shell completion script (bash|zsh) [m4c|mein]",
     },
 };
 
