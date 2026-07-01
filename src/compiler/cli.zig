@@ -163,6 +163,10 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.help_mode = true;
             continue;
         }
+        if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
+            flags.version_mode = true;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--debug") or std.mem.eql(u8, arg, "-d")) {
             flags.debug_mode = true;
             continue;
@@ -835,6 +839,7 @@ fn printHelp() void {
         \\Use 'm4c <command> help' for command-specific help (e.g. 'm4c lint help --zon').
         \\
         \\Flags:
+        \\  -v, --version                  Show version
         \\  -d, --debug                    Show bytecode before execution
         \\  -f, --format                   Format source code and print
         \\  -p, --pretty                   Colored error output for terminal readability

@@ -60,7 +60,14 @@ fn printUsage() void {
     std.debug.print(
         \\  help          Show this help
         \\
+        \\Flags:
+        \\  --version, -v  Show version
+        \\
     , .{});
+}
+
+fn printVersion() void {
+    std.debug.print("mein v{s}\n", .{VERSION});
 }
 
 pub fn main(init: std.process.Init) void {
@@ -78,8 +85,18 @@ pub fn main(init: std.process.Init) void {
 
     const subcmd = args[1];
 
+    if (std.mem.eql(u8, subcmd, "--version") or std.mem.eql(u8, subcmd, "-v")) {
+        printVersion();
+        return;
+    }
+
     if (std.mem.eql(u8, subcmd, "help")) {
         printUsage();
+        return;
+    }
+
+    if (std.mem.eql(u8, subcmd, "version")) {
+        printVersion();
         return;
     }
 
