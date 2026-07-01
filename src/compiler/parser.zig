@@ -473,7 +473,7 @@ fn getRule(tag: Token.Tag) ParseRule {
         .int_literal => .{ .prefix = &number, .infix = null, .precedence = .none },
         .float_literal => .{ .prefix = &number, .infix = null, .precedence = .none },
         .str_literal => .{ .prefix = &string, .infix = null, .precedence = .none },
-        .char_literal => .{ .prefix = &literal, .infix = null, .precedence = .none },
+        .char_literal => .{ .prefix = &charLiteral, .infix = null, .precedence = .none },
         .kw_nil => .{ .prefix = &literal, .infix = null, .precedence = .none },
         .kw_true => .{ .prefix = &literal, .infix = null, .precedence = .none },
         .kw_false => .{ .prefix = &literal, .infix = null, .precedence = .none },
@@ -503,6 +503,11 @@ fn number(self: *Parser) !usize {
 fn string(self: *Parser) !usize {
     const lexeme = self.previous.start;
     return self.arena.add(.{ .str_lit = lexeme[1 .. lexeme.len - 1] });
+}
+
+fn charLiteral(self: *Parser) !usize {
+    const lexeme = self.previous.start;
+    return self.arena.add(.{ .char_lit = lexeme[1] });
 }
 
 fn literal(self: *Parser) !usize {
