@@ -151,7 +151,7 @@ fun test_for_with_esc() i32
     ret 0
 
 pub fun main() i32
-    let failures = 0
+    mut failures i32 = 0
 
     failures = failures + test_if_elif_else()
     failures = failures + test_loop()

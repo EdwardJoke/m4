@@ -8,3 +8,6 @@ zig-pkg/
 
 # m4 self cache
 .m4_cache/
+
+# Review Trash
+.revtrash/

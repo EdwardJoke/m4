@@ -126,7 +126,7 @@ $ m4c                       # launch REPL
 $ m4c lint file.m4          # type-check only
 $ m4c build file.m4         # compile to native binary
 $ m4c -d file.m4            # show bytecode
-$ m4c -f file.m4            # format source
+$ m4c --format file.m4       # format source
 ```
 
 ## Common Pitfalls

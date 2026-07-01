@@ -77,6 +77,7 @@ pub fn run(init: std.process.Init) !void {
             try runBuild(arena_alloc, init.io, path, flags);
         } else {
             std.debug.print("m4c build: missing file path. Usage: m4c build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+            return error.InvalidFlag;
         }
         return;
     }
@@ -86,6 +87,7 @@ pub fn run(init: std.process.Init) !void {
             try runLint(arena_alloc, init.io, path, flags);
         } else {
             std.debug.print("m4c lint: missing file path. Usage: m4c lint <file.m4>\n", .{});
+            return error.InvalidFlag;
         }
         return;
     }
@@ -225,13 +227,27 @@ fn parseFlags(args: []const []const u8) !Flags {
         }
         // explain subcommand
         if (std.mem.eql(u8, arg, "explain")) {
-            if (i + 1 >= args.len or std.mem.startsWith(u8, args[i + 1], "-")) {
+            i += 1;
+            if (i >= args.len or std.mem.startsWith(u8, args[i], "-")) {
                 std.debug.print("m4c: 'explain' requires an error code. Try 'm4c explain r001'.\n", .{});
                 return error.InvalidFlag;
             }
-            i += 1;
             if (std.mem.eql(u8, args[i], "help")) {
                 flags.subcommand_help = "explain";
+                i += 1;
+                while (i < args.len) : (i += 1) {
+                    const sub = args[i];
+                    if (std.mem.eql(u8, sub, "--json")) {
+                        flags.output_format = .json;
+                    } else if (std.mem.eql(u8, sub, "--yaml")) {
+                        flags.output_format = .yaml;
+                    } else if (std.mem.eql(u8, sub, "--zon")) {
+                        flags.output_format = .zon;
+                    } else {
+                        std.debug.print("m4c: unknown explain flag '{s}'\n", .{sub});
+                        return error.InvalidFlag;
+                    }
+                }
                 continue;
             }
             flags.explain_code = args[i];
@@ -243,6 +259,41 @@ fn parseFlags(args: []const []const u8) !Flags {
             i += 1;
             if (i < args.len and std.mem.eql(u8, args[i], "help")) {
                 flags.subcommand_help = "build";
+                i += 1;
+                while (i < args.len) : (i += 1) {
+                    const sub = args[i];
+                    if (std.mem.eql(u8, sub, "--json")) {
+                        flags.output_format = .json;
+                    } else if (std.mem.eql(u8, sub, "--yaml")) {
+                        flags.output_format = .yaml;
+                    } else if (std.mem.eql(u8, sub, "--zon")) {
+                        flags.output_format = .zon;
+                    } else if (std.mem.eql(u8, sub, "-o") or std.mem.eql(u8, sub, "--output")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: --output requires a path argument\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.output_path = args[i];
+                    } else if (std.mem.eql(u8, sub, "-target") or std.mem.eql(u8, sub, "--target")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: --target requires an argument\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.build_target = args[i];
+                    } else if (std.mem.eql(u8, sub, "-O")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: -O requires an optimization level\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.qbe_opt = args[i];
+                    } else {
+                        std.debug.print("m4c: unknown build flag '{s}'\n", .{sub});
+                        return error.InvalidFlag;
+                    }
+                }
                 continue;
             }
             // Parse remaining arguments for the build subcommand
@@ -758,8 +809,8 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
 
     const output_path = flags.output_path orelse blk: {
         // Derive output name from input: replace .m4 extension or add .out
-        if (std.mem.lastIndexOf(u8, path, ".")) |dot| {
-            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path[0..dot]});
+        if (std.mem.endsWith(u8, path, ".m4")) {
+            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path[0..path.len - 3]});
         } else {
             break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path});
         }

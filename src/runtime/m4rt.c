@@ -274,8 +274,8 @@ int64_t m4_neg(int64_t a) {
 int64_t m4_add_u(int64_t a, int64_t b) { return a + b; }
 int64_t m4_sub_u(int64_t a, int64_t b) { return a - b; }
 int64_t m4_mul_u(int64_t a, int64_t b) { return a * b; }
-int64_t m4_div_u(int64_t a, int64_t b) { if (b == 0) return (int64_t)(void*)&m4_nil; return m4_box_int(a / b); }
-int64_t m4_mod_u(int64_t a, int64_t b) { if (b == 0) return (int64_t)(void*)&m4_nil; return m4_box_int(a % b); }
+int64_t m4_div_u(int64_t a, int64_t b) { if (b == 0 || (b == -1 && a == INT64_MIN)) return (int64_t)(void*)&m4_nil; return m4_box_int(a / b); }
+int64_t m4_mod_u(int64_t a, int64_t b) { if (b == 0 || (b == -1 && a == INT64_MIN)) return (int64_t)(void*)&m4_nil; return m4_box_int(a % b); }
 int64_t m4_neg_u(int64_t a) { return -a; }
 int64_t m4_not_u(int64_t a) { return !a; }
 

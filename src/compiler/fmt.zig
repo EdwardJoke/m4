@@ -133,6 +133,17 @@ fn formatExpr(arena: *ast.NodeArena, node_idx: usize) void {
             }
             std.debug.print("]", .{});
         },
+        .assign => |a| {
+            formatExpr(arena, a.target);
+            std.debug.print(" = ", .{});
+            formatExpr(arena, a.value);
+        },
+        .index => |ix| {
+            formatExpr(arena, ix.object);
+            std.debug.print("[", .{});
+            formatExpr(arena, ix.idx);
+            std.debug.print("]", .{});
+        },
         .try_expr => |inner| {
             formatExpr(arena, inner);
             std.debug.print("?", .{});

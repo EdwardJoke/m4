@@ -32,6 +32,20 @@ _m4c() {
         esac
     fi
 
+    # Handle global flags that take a file argument at any position
+    local seen_global=0
+    for ((i=1; i<cword; i++)); do
+        case "${words[i]}" in
+            -d|--debug|-f|--format|-p|--pretty|--native|--zon|--json|--yaml)
+                seen_global=1
+                ;;
+        esac
+    done
+    if [[ $seen_global -eq 1 ]]; then
+        _filedir '@(m4)'
+        return
+    fi
+
     local cmd="${words[1]}"
     case "$cmd" in
         help)

@@ -46,6 +46,10 @@ pub fn nextToken(self: *Scanner) Token.Token {
             _ = self.indent_stack.pop();
             return makeToken(self, .dedent, "");
         }
+        if (self.in_line) {
+            self.in_line = false;
+            return makeToken(self, .newline, "");
+        }
         return makeToken(self, .eof, "");
     }
 

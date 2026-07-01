@@ -24,7 +24,7 @@ pub fn emitProgram(
         .block_counter = 0,
         .str_counter = 0,
         .scope = std.StringHashMap(VarSlot).init(allocator),
-        .scope_stack = try std.ArrayList(std.ArrayList([]const u8)).initCapacity(allocator, 0),
+        .scope_stack = try std.ArrayList(std.ArrayList(ScopeEntry)).initCapacity(allocator, 0),
         .strings = std.StringHashMap([]const u8).init(allocator),
         .str_arena = std.heap.ArenaAllocator.init(allocator),
         .temp_boxed = std.StringHashMap(BoxKind).init(allocator),
@@ -111,9 +111,14 @@ const BoxKind = enum {
 };
 
 const VarSlot = struct {
-    name: []const u8, // QBE temp name like "%v0"
+    name: []const u8,
     ty: QbeType,
     boxed: BoxKind, // .boxed = M4Value*, .raw_* = unboxed scalar kind
+};
+
+const ScopeEntry = struct {
+    name: []const u8,
+    prev: ?VarSlot,
 };
 
 // ─── Emitter ───────────────────────────────────────────────────────────────
@@ -131,7 +136,7 @@ const Emitter = struct {
     // Scoped variable mapping (name -> slot). Flat during emission, managed by
     // scope_stack for entering/leaving scopes.
     scope: std.StringHashMap(VarSlot),
-    scope_stack: std.ArrayList(std.ArrayList([]const u8)), // keys added per scope level
+    scope_stack: std.ArrayList(std.ArrayList(ScopeEntry)), // scope levels with shadowing recovery
 
     // Collected string literals (content -> data label name)
     strings: std.StringHashMap([]const u8),
@@ -196,10 +201,13 @@ const Emitter = struct {
     /// Record a variable in the current scope and track the key so popScope
     /// can correctly remove only entries added in this level.
     fn scopePut(self: *Emitter, name: []const u8, slot: VarSlot) !void {
+        // Save any previous binding so popScope can restore it
+        const prev = self.scope.get(name);
         try self.scope.put(name, slot);
         // Track this key in the current (innermost) scope level
         if (self.scope_stack.items.len > 0) {
-            try self.scope_stack.items[self.scope_stack.items.len - 1].append(self.allocator, name);
+            const entry = ScopeEntry{ .name = name, .prev = prev };
+            try self.scope_stack.items[self.scope_stack.items.len - 1].append(self.allocator, entry);
         }
     }
 
@@ -209,11 +217,15 @@ const Emitter = struct {
     }
 
     fn popScope(self: *Emitter) void {
-        // Remove only the keys that were added in the scope level being popped
-        var added = self.scope_stack.pop();
-        defer added.deinit(self.allocator);
-        for (added.items) |key| {
-            _ = self.scope.remove(key);
+        // Restore keys that were added in the scope level being popped
+        var entries = self.scope_stack.pop();
+        defer entries.deinit(self.allocator);
+        for (entries.items) |entry| {
+            if (entry.prev) |prev| {
+                try self.scope.put(entry.name, prev) catch {};
+            } else {
+                _ = self.scope.remove(entry.name);
+            }
         }
     }
 
@@ -554,9 +566,14 @@ const Emitter = struct {
 
             try self.fmt("{s}\n", .{else_label.?});
             const elif_cond = try self.emitExpr(elif.cond);
-            const elif_truthy = try self.freshTemp();
-            try self.fmt("\t{s} =l call $m4_is_truthy(l {s})\n", .{ elif_truthy, elif_cond });
-            try self.fmt("\tjnz {s}, {s}, {s}\n", .{ elif_truthy, elif_then, elif_else });
+            const elif_boxed = self.temp_boxed.get(elif_cond) orelse .boxed;
+            if (elif_boxed == .boxed) {
+                const elif_truthy = try self.freshTemp();
+                try self.fmt("\t{s} =l call $m4_is_truthy(l {s})\n", .{ elif_truthy, elif_cond });
+                try self.fmt("\tjnz {s}, {s}, {s}\n", .{ elif_truthy, elif_then, elif_else });
+            } else {
+                try self.fmt("\tjnz {s}, {s}, {s}\n", .{ elif_cond, elif_then, elif_else });
+            }
             try self.fmt("{s}\n", .{elif_then});
             try self.emitBlockStatements(&.{elif.body});
             if (!self.bodyEndsWithTerminator(elif.body)) {
@@ -663,6 +680,9 @@ const Emitter = struct {
         try self.fmt("\tstorel {s}, {s}\n", .{ elem_temp, loop_var_slot });
 
         try self.emitBlockStatements(&.{fs.body});
+        if (!self.bodyEndsWithTerminator(fs.body)) {
+            try self.fmt("\tjmp {s}\n", .{inc_label});
+        }
 
         // Increment
         try self.fmt("{s}\n", .{inc_label});
@@ -1066,6 +1086,11 @@ const Emitter = struct {
             const name = target.ident;
             if (self.lookupVar(name)) |slot| {
                 try self.fmt("\tstore{s} {s}, {s}\n", .{ QbeStoreSuffix(slot.ty), value_temp, slot.name });
+                // Update boxed metadata to match the stored value
+                const value_boxed = self.temp_boxed.get(value_temp) orelse .boxed;
+                // The slot tracks its own boxed kind; we keep it in sync
+                const updated_slot = VarSlot{ .name = slot.name, .ty = slot.ty, .boxed = value_boxed };
+                _ = self.scope.put(name, updated_slot) catch {};
             }
         }
 
@@ -1130,8 +1155,13 @@ const Emitter = struct {
 
     fn emitTry(self: *Emitter, idx: usize) ![]const u8 {
         const inner = self.arena.get(idx).try_expr;
-        // For now, just emit the inner expression (no error propagation in QBE yet)
-        return try self.emitExpr(inner);
+        const val = try self.emitExpr(inner);
+        const check = try self.freshTemp();
+        try self.fmt("\t{s} =w ceql {s}, 0\n", .{ check, val });
+        const ok_label = try self.freshBlock("try_ok");
+        try self.fmt("\tjnz {s}, {s}, @panic\n", .{ check, ok_label });
+        try self.fmt("{s}\n", .{ok_label});
+        return val;
     }
 
     // ── Type Helpers ──────────────────────────────────────────────────

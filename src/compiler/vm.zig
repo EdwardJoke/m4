@@ -91,6 +91,7 @@ pub fn interpret(self: *VM, chunk: *const Chunk) !void {
 
 fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: anytype) error{RuntimeError} {
     const msg = std.fmt.allocPrint(self.allocator, fmt, args) catch "runtime error";
+    defer if (self.diag == null) self.allocator.free(msg);
     if (self.diag) |diag| {
         diag.add(self.allocator, .{
             .severity = .@"error",
@@ -157,6 +158,7 @@ inline fn fastEql(a: Value.Value, b: Value.Value) bool {
         .thread_handle => a.thread_handle == b.thread_handle,
         .channel => a.channel == b.channel,
         .vec => a.vec == b.vec,
+        .struct_obj => a.struct_obj == b.struct_obj,
     };
 }
 
@@ -214,7 +216,7 @@ pub fn run(self: *VM) !void {
                 const val = self.registers[base + dec.a];
                 try self.globals.put(name, val);
                 for (&self.global_cache) |*entry| {
-                    if (entry.name.ptr == name.ptr and entry.name.len == name.len) {
+        if (std.mem.eql(u8, entry.name, name)) {
                         entry.value = val;
                         break;
                     }
@@ -319,7 +321,7 @@ pub fn run(self: *VM) !void {
                 const d = OpCode.decodeABC(inst);
                 const a_val = self.registers[base + d.b];
                 const b_val = self.registers[base + d.c];
-                self.registers[base + d.a] = if (isStringLike(a_val) or isStringLike(b_val))
+                self.registers[base + d.a] = if (isStringLike(a_val) and isStringLike(b_val))
                     .{ .bool = std.mem.eql(u8, stringSlice(a_val), stringSlice(b_val)) }
                 else
                     .{ .bool = fastEql(a_val, b_val) };
@@ -329,7 +331,7 @@ pub fn run(self: *VM) !void {
                 const d = OpCode.decodeABC(inst);
                 const a_val = self.registers[base + d.b];
                 const b_val = self.registers[base + d.c];
-                self.registers[base + d.a] = if (isStringLike(a_val) or isStringLike(b_val))
+                self.registers[base + d.a] = if (isStringLike(a_val) and isStringLike(b_val))
                     .{ .bool = !std.mem.eql(u8, stringSlice(a_val), stringSlice(b_val)) }
                 else
                     .{ .bool = !fastEql(a_val, b_val) };
@@ -426,9 +428,12 @@ pub fn run(self: *VM) !void {
                 if (callee == .fun_obj) {
                     const fun: *Object.FunObj = @ptrCast(@alignCast(callee.fun_obj));
                     if (self.frame_count >= FRAMES_MAX) return self.runtimeError("r006", "stack overflow: too many nested calls", .{});
-                    frame.pc = pc + 1;
-                    const new_base = base + dec.b + 1 + dec.c;
                     const arg_count = dec.c;
+                    const new_base = base + dec.b + 1 + arg_count;
+                    const arg_base = base + dec.b + 1;
+                    if (new_base > REGISTER_COUNT or arg_base + arg_count > REGISTER_COUNT)
+                        return self.runtimeError("r006", "register window overflow in call", .{});
+                    frame.pc = pc + 1;
                     self.frame_count += 1;
                     frame = &self.frames[self.frame_count - 1];
                     frame.chunk = &fun.chunk;
@@ -439,7 +444,6 @@ pub fn run(self: *VM) !void {
                     frame.ret_pc = 0;
                     frame.ret_dst = base + dec.a;
                     // Copy args — unrolled for small arg counts (hot path for Fibonacci)
-                    const arg_base = base + dec.b + 1;
                     switch (arg_count) {
                         0 => {},
                         1 => self.registers[new_base] = self.registers[arg_base],
@@ -559,12 +563,12 @@ pub fn run(self: *VM) !void {
                 const r = base + OpCode.decodeAx(inst);
                 const s = try self.allocator.create(Object.StructObj);
                 s.fields = std.StringHashMap(Value.Value).init(self.allocator);
-                self.registers[r] = .{ .vec = @ptrCast(s) };
+                self.registers[r] = .{ .struct_obj = @ptrCast(s) };
                 pc += 1;
             },
             .struct_set => {
                 const d = OpCode.decodeABx(inst);
-                const s: *Object.StructObj = @ptrCast(@alignCast(self.registers[base + d.a].vec));
+                const s: *Object.StructObj = @ptrCast(@alignCast(self.registers[base + d.a].struct_obj));
                 const name = constants[d.bx].string;
                 try s.fields.put(name, self.registers[base + d.a + 1]);
                 pc += 1;
@@ -572,8 +576,8 @@ pub fn run(self: *VM) !void {
             .get_field => {
                 const d = OpCode.decodeABC(inst);
                 const obj = self.registers[base + d.b];
-                if (obj == .vec) {
-                    const s: *Object.StructObj = @ptrCast(@alignCast(obj.vec));
+                if (obj == .struct_obj) {
+                    const s: *Object.StructObj = @ptrCast(@alignCast(obj.struct_obj));
                     const name = constants[d.c].string;
                     self.registers[base + d.a] = s.fields.get(name) orelse .nil;
                 } else {

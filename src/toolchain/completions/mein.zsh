@@ -5,6 +5,7 @@ _mein() {
     typeset -A opt_args
 
     _arguments -C \
+        '(-v --version){-v,--version}'[Show version] \
         '1: :->cmds' \
         '*: :->args'
 
@@ -15,11 +16,13 @@ _mein() {
                 new\:"Alias for init"
                 clean\:"Clean build artifacts and caches"
                 help\:"Show help"
+                completions\:"Generate shell completions"
+                version\:"Show version"
             ))'
             ;;
         args)
             case "$line[1]" in
-                init|new) ;;
+                init|new|completions|version) ;;
                 clean|help) ;;
             esac
             ;;

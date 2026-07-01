@@ -16,6 +16,7 @@ pub const Value = union(enum) {
     thread_handle: *anyopaque,
     channel: *anyopaque,
     vec: *anyopaque,
+    struct_obj: *anyopaque,
 
     /// Check structural equality between two values. Compares by type and content.
     pub fn eql(self: Value, other: Value) bool {
@@ -38,6 +39,7 @@ pub const Value = union(enum) {
             .thread_handle => |a| a == other.thread_handle,
             .channel => |a| a == other.channel,
             .vec => |a| a == other.vec,
+            .struct_obj => |a| a == other.struct_obj,
         };
     }
 
@@ -71,6 +73,7 @@ pub const Value = union(enum) {
             .thread_handle => try writer.writeAll("<thread-handle>"),
             .channel => try writer.writeAll("<channel>"),
             .vec => try writer.writeAll("<vec>"),
+            .struct_obj => try writer.writeAll("<struct>"),
         }
     }
 };

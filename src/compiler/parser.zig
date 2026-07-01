@@ -62,6 +62,7 @@ pub fn deinit(self: *Parser) void {
 /// Parse the entire source into a list of AST statement indices. Returns ParseError on syntax errors.
 pub fn parse(self: *Parser) ![]const usize {
     var stmts = std.ArrayList(usize).empty;
+    errdefer stmts.deinit(self.allocator);
     self.skipNewlines();
     while (!self.check(.eof)) {
         if (try self.declaration()) |stmt| {
@@ -472,6 +473,7 @@ fn getRule(tag: Token.Tag) ParseRule {
         .int_literal => .{ .prefix = &number, .infix = null, .precedence = .none },
         .float_literal => .{ .prefix = &number, .infix = null, .precedence = .none },
         .str_literal => .{ .prefix = &string, .infix = null, .precedence = .none },
+        .char_literal => .{ .prefix = &literal, .infix = null, .precedence = .none },
         .kw_nil => .{ .prefix = &literal, .infix = null, .precedence = .none },
         .kw_true => .{ .prefix = &literal, .infix = null, .precedence = .none },
         .kw_false => .{ .prefix = &literal, .infix = null, .precedence = .none },
@@ -623,6 +625,11 @@ fn structLiteral(self: *Parser, type_node: usize) !usize {
             try fields.append(self.allocator, .{ .name = fname, .value = val });
             // After the field, check for end or more fields
             self.skipNewlinesAndIndent();
+            if (self.check(.rparen)) break;
+            if (self.check(.comma)) {
+                self.advanceRaw();
+                self.skipNewlinesAndIndent();
+            }
             if (self.check(.rparen)) break;
             if (!self.check(.ident)) break;
         }
