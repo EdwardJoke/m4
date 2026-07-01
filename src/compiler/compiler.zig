@@ -570,7 +570,14 @@ fn compileStmtToChunk(
                 try locals.add(allocator, ls.name, slot, ls.mutable);
             }
         },
-        .expr_stmt => _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, node.expr_stmt),
+        .expr_stmt => {
+            _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, node.expr_stmt);
+            var max_slot: u8 = 0;
+            for (locals.list.items) |l| {
+                if (l.slot + 1 > max_slot) max_slot = l.slot + 1;
+            }
+            reg_count.* = max_slot;
+        },
         .ret_stmt => {
             var ret_reg: u8 = 0;
             if (node.ret_stmt) |vi| ret_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, vi);
