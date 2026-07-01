@@ -1,4 +1,5 @@
 const std = @import("std");
+const Io = std.Io;
 const init_cmd = @import("init_cmd.zig");
 const clean_cmd = @import("clean_cmd.zig");
 
@@ -7,7 +8,7 @@ const VERSION = "0.4.0";
 const Command = struct {
     name: []const u8,
     aliases: []const []const u8,
-    runFn: *const fn (allocator: std.mem.Allocator, args: []const []const u8) anyerror!void,
+    runFn: *const fn (io: Io, allocator: std.mem.Allocator, args: []const []const u8) anyerror!void,
     description: []const u8,
 };
 
@@ -56,6 +57,7 @@ fn printUsage() void {
 }
 
 pub fn main(init: std.process.Init) void {
+    const io = init.io;
     const arena = init.arena.allocator();
     const args = init.minimal.args.toSlice(arena) catch {
         printUsage();
@@ -77,7 +79,7 @@ pub fn main(init: std.process.Init) void {
     for (&commands) |cmd| {
         if (std.mem.eql(u8, subcmd, cmd.name)) {
             const cmd_args = if (args.len > 2) args[2..] else &.{};
-            cmd.runFn(arena, cmd_args) catch |err| {
+            cmd.runFn(io, arena, cmd_args) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 std.process.exit(1);
             };
@@ -86,7 +88,7 @@ pub fn main(init: std.process.Init) void {
         for (cmd.aliases) |alias| {
             if (std.mem.eql(u8, subcmd, alias)) {
                 const cmd_args = if (args.len > 2) args[2..] else &.{};
-                cmd.runFn(arena, cmd_args) catch |err| {
+                cmd.runFn(io, arena, cmd_args) catch |err| {
                     std.debug.print("error: {}\n", .{err});
                     std.process.exit(1);
                 };
