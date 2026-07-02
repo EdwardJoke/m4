@@ -217,12 +217,17 @@ const Emitter = struct {
     }
 
     fn popScope(self: *Emitter) void {
-        // Restore keys that were added in the scope level being popped
+        // Restore keys that were added in the scope level being popped.
+        // Iterate in reverse so rebinding a name multiple times within one
+        // scope level restores the earliest saved prev value last (correct).
         var entries = self.scope_stack.pop();
         defer entries.deinit(self.allocator);
-        for (entries.items) |entry| {
+        var i: usize = entries.items.len;
+        while (i > 0) {
+            i -= 1;
+            const entry = entries.items[i];
             if (entry.prev) |prev| {
-                try self.scope.put(entry.name, prev) catch {};
+                self.scope.put(entry.name, prev) catch {};
             } else {
                 _ = self.scope.remove(entry.name);
             }
@@ -1159,7 +1164,7 @@ const Emitter = struct {
         const check = try self.freshTemp();
         try self.fmt("\t{s} =w ceql {s}, 0\n", .{ check, val });
         const ok_label = try self.freshBlock("try_ok");
-        try self.fmt("\tjnz {s}, {s}, @panic\n", .{ check, ok_label });
+        try self.fmt("\tjnz {s}, @panic, {s}\n", .{ check, ok_label });
         try self.fmt("{s}\n", .{ok_label});
         return val;
     }

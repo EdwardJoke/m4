@@ -170,8 +170,8 @@ pub const Checker = struct {
     fn registerNativeFunctions(self: *Checker, module: []const u8) !void {
         // Register native function types for known modules
         if (std.mem.eql(u8, module, "std")) {
-            try self.root_env.define("std.println", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
-            try self.root_env.define("std.print", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.println", try self.allocType(.{ .func = .{ .params = &.{Type.Type{ .void_type = {} }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.print", try self.allocType(.{ .func = .{ .params = &.{Type.Type{ .void_type = {} }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
             try self.root_env.define("std.readln", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("std.read", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
             try self.root_env.define("std.readChar", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .char })) } }), false);
@@ -391,6 +391,7 @@ pub const Checker = struct {
             .vec_lit => |items| self.checkVecLitInEnv(env, items),
             .struct_lit => |sl| {
                 if (self.type_defs.get(sl.type_name)) |t| return t;
+                self.typeError("t002", "Unknown struct type");
                 return try self.allocType(.{ .primitive = .i32 });
             },
             .assign => |a| self.checkAssignInEnv(env, a),
@@ -413,7 +414,13 @@ pub const Checker = struct {
                 self.typeError("t007", "Arithmetic requires numeric operands");
                 return try self.allocType(.{ .primitive = .i32 });
             },
-            .eq, .neq, .gt, .lt, .gte, .lte => {
+            .eq, .neq => {
+                if (isComparable(lt, rt)) return try self.allocType(.{ .primitive = .bool });
+                if (lt.* == .named and rt.* == .named and lt.eql(rt)) return try self.allocType(.{ .primitive = .bool });
+                self.typeError("t007", "Incomparable types");
+                return try self.allocType(.{ .primitive = .bool });
+            },
+            .gt, .lt, .gte, .lte => {
                 if (isComparable(lt, rt)) return try self.allocType(.{ .primitive = .bool });
                 self.typeError("t007", "Incomparable types");
                 return try self.allocType(.{ .primitive = .bool });

@@ -90,8 +90,11 @@ pub fn interpret(self: *VM, chunk: *const Chunk) !void {
 }
 
 fn runtimeError(self: *VM, code: []const u8, comptime fmt: []const u8, args: anytype) error{RuntimeError} {
-    const msg = std.fmt.allocPrint(self.allocator, fmt, args) catch "runtime error";
-    defer if (self.diag == null) self.allocator.free(msg);
+    const heap_msg = std.fmt.allocPrint(self.allocator, fmt, args);
+    const msg = heap_msg catch "runtime error";
+    defer if (self.diag == null) {
+        if (heap_msg) |m| self.allocator.free(m);
+    };
     if (self.diag) |diag| {
         diag.add(self.allocator, .{
             .severity = .@"error",
@@ -428,10 +431,10 @@ pub fn run(self: *VM) !void {
                 if (callee == .fun_obj) {
                     const fun: *Object.FunObj = @ptrCast(@alignCast(callee.fun_obj));
                     if (self.frame_count >= FRAMES_MAX) return self.runtimeError("r006", "stack overflow: too many nested calls", .{});
-                    const arg_count = dec.c;
-                    const new_base = base + dec.b + 1 + arg_count;
-                    const arg_base = base + dec.b + 1;
-                    if (new_base > REGISTER_COUNT or arg_base + arg_count > REGISTER_COUNT)
+                    const arg_count = @as(usize, dec.c);
+                    const new_base = @as(usize, base) + @as(usize, dec.b) + 1 + arg_count;
+                    const arg_base = @as(usize, base) + @as(usize, dec.b) + 1;
+                    if (new_base >= REGISTER_COUNT or arg_base + arg_count >= REGISTER_COUNT)
                         return self.runtimeError("r006", "register window overflow in call", .{});
                     frame.pc = pc + 1;
                     self.frame_count += 1;
@@ -479,7 +482,8 @@ pub fn run(self: *VM) !void {
                 const d = OpCode.decodeAx(inst);
                 const ret_val = self.registers[base + d];
                 const ret_dst = frame.ret_dst;
-                if (self.frame_count > 1) {
+                const is_root = self.frame_count == 1;
+                if (!is_root) {
                     self.frame_count -= 1;
                     frame = &self.frames[self.frame_count - 1];
                     code = frame.code;
@@ -487,7 +491,7 @@ pub fn run(self: *VM) !void {
                     pc = frame.pc;
                 }
                 self.registers[ret_dst] = ret_val;
-                if (self.frame_count == 1) return;
+                if (is_root) return;
             },
 
             .new_vec => {

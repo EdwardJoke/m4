@@ -2,6 +2,7 @@ const std = @import("std");
 const VM = @import("../compiler/vm.zig");
 const value = @import("../compiler/value.zig");
 const object = @import("../compiler/object.zig");
+const Chunk = @import("../compiler/chunk.zig").Chunk;
 const m4_std = @import("std.zig");
 
 // Channel capacity for message passing between threads.
@@ -105,7 +106,7 @@ fn threadEntry(info: *SpawnInfo) void {
 
     child_vm.run() catch {};
 
-    info.handle.result = cloneValue(child_vm.registers[0], std.heap.page_allocator);
+    info.handle.result = cloneValue(child_vm.registers[0], std.heap.page_allocator) catch .nil;
 
     std.heap.page_allocator.destroy(info);
 }
@@ -118,7 +119,7 @@ fn joinFn(vm: *VM, args: []const value.Value) value.Value {
     const handle: *ThreadHandleObj = @ptrCast(@alignCast(args[0].thread_handle));
     handle.thread.join();
 
-    const result = cloneValue(handle.result, vm.allocator);
+    const result = cloneValue(handle.result, vm.allocator) catch .nil;
     destroyValue(handle.result, std.heap.page_allocator);
     std.heap.page_allocator.destroy(handle);
     return result;
@@ -186,44 +187,87 @@ fn recvFn(_: *VM, args: []const value.Value) value.Value {
 
 /// Deep-clone a value's heap-backed data into the given allocator.
 /// Returns a value whose heap data is owned by the allocator.
-fn cloneValue(val: value.Value, allocator: std.mem.Allocator) value.Value {
+fn cloneValue(val: value.Value, allocator: std.mem.Allocator) error{OutOfMemory}!value.Value {
     return switch (val) {
-        .string => |s| .{
-            .string = allocator.dupe(u8, s) catch return .nil,
-        },
+        .nil, .bool, .int, .float, .char => val,
+        .@"fn" => val,
+        .string => |s| value.Value{ .string = try allocator.dupe(u8, s) },
         .vec => |v| {
-            const VecObj = @import("../compiler/object.zig").VecObj;
+            const VecObj = object.VecObj;
             const old: *VecObj = @ptrCast(@alignCast(v));
-            const new = allocator.create(VecObj) catch return .nil;
-            new.* = .{ .items = std.ArrayList(value.Value).initCapacity(allocator, old.items.items.len) catch return .nil };
+            const new = try allocator.create(VecObj);
+            errdefer allocator.destroy(new);
+            new.* = .{ .items = try std.ArrayList(value.Value).initCapacity(allocator, old.items.items.len) };
+            errdefer new.items.deinit(allocator);
             for (old.items.items) |item| {
-                new.items.appendAssumeCapacity(cloneValue(item, allocator));
+                new.items.appendAssumeCapacity(try cloneValue(item, allocator));
             }
             return .{ .vec = @ptrCast(new) };
         },
         .struct_obj => |s| {
-            const StructObj = @import("../compiler/object.zig").StructObj;
+            const StructObj = object.StructObj;
             const old: *StructObj = @ptrCast(@alignCast(s));
-            const new = allocator.create(StructObj) catch return .nil;
+            const new = try allocator.create(StructObj);
+            errdefer allocator.destroy(new);
             new.* = .{ .fields = std.StringHashMap(value.Value).init(allocator) };
+            errdefer new.fields.deinit();
             var it = old.fields.iterator();
             while (it.next()) |entry| {
-                const key = allocator.dupe(u8, entry.key_ptr.*) catch return .nil;
-                const entry_val = cloneValue(entry.value_ptr.*, allocator);
-                new.fields.put(key, entry_val) catch return .nil;
+                const key = try allocator.dupe(u8, entry.key_ptr.*);
+                errdefer if (key.len > 0) allocator.free(key);
+                const entry_val = try cloneValue(entry.value_ptr.*, allocator);
+                try new.fields.put(key, entry_val);
             }
             return .{ .struct_obj = @ptrCast(new) };
         },
         .string_builder => |sb| {
-            const StringBuilderObj = @import("../compiler/object.zig").StringBuilderObj;
+            const StringBuilderObj = object.StringBuilderObj;
             const old: *StringBuilderObj = @ptrCast(@alignCast(sb));
-            const new = allocator.create(StringBuilderObj) catch return .nil;
-            new.* = .{ .buf = std.ArrayList(u8).initCapacity(allocator, old.buf.items.len) catch return .nil };
+            const new = try allocator.create(StringBuilderObj);
+            errdefer allocator.destroy(new);
+            new.* = .{ .buf = try std.ArrayList(u8).initCapacity(allocator, old.buf.items.len) };
             new.buf.appendSliceAssumeCapacity(old.buf.items);
             return .{ .string_builder = @ptrCast(new) };
         },
-        else => val,
+        .fun_obj => |f| {
+            const FunObj = object.FunObj;
+            const old: *FunObj = @ptrCast(@alignCast(f));
+            const new = try allocator.create(FunObj);
+            errdefer allocator.destroy(new);
+            new.* = .{
+                .name = try allocator.dupe(u8, old.name),
+                .chunk = try cloneChunk(&old.chunk, allocator),
+                .param_count = old.param_count,
+            };
+            return .{ .fun_obj = @ptrCast(new) };
+        },
+        .channel => |c| {
+            const old: *ChannelObj = @ptrCast(@alignCast(c));
+            const new = try allocator.create(ChannelObj);
+            errdefer allocator.destroy(new);
+            for (&old.buf, 0..) |*item, i| {
+                new.buf[i] = try cloneValue(item.*, allocator);
+            }
+            new.head = old.head;
+            new.tail = old.tail;
+            new.closed = old.closed;
+            return .{ .channel = @ptrCast(new) };
+        },
     };
+}
+
+fn cloneChunk(old: *const Chunk, allocator: std.mem.Allocator) error{OutOfMemory}!Chunk {
+    var new = Chunk.init(allocator);
+    errdefer new.deinit();
+    try new.code.ensureTotalCapacity(allocator, old.code.items.len);
+    new.code.appendSliceAssumeCapacity(old.code.items);
+    try new.lines.ensureTotalCapacity(allocator, old.lines.items.len);
+    new.lines.appendSliceAssumeCapacity(old.lines.items);
+    try new.constants.ensureTotalCapacity(allocator, old.constants.items.len);
+    for (old.constants.items) |c| {
+        new.constants.appendAssumeCapacity(try cloneValue(c, allocator));
+    }
+    return new;
 }
 
 /// Free heap-backed data referenced by a value, previously cloned with cloneValue.
