@@ -99,8 +99,8 @@ pub const Checker = struct {
         }
     }
 
-    fn allocType(self: *Checker, t: Type.Type) *const Type.Type {
-        const ptr = self.type_arena.allocator().create(Type.Type) catch @panic("OOM");
+    fn allocType(self: *Checker, t: Type.Type) error{OutOfMemory}!*const Type.Type {
+        const ptr = try self.type_arena.allocator().create(Type.Type);
         ptr.* = t;
         return ptr;
     }
@@ -110,41 +110,41 @@ pub const Checker = struct {
         switch (node) {
             .ident => {
                 if (Type.parseTypeName(node.ident)) |p| {
-                    return self.allocType(.{ .primitive = p });
+                    return try self.allocType(.{ .primitive = p });
                 }
                 if (self.type_defs.get(node.ident)) |t| return t;
                 self.typeError("t001", "Unknown type");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .type_ident => |name| {
                 if (Type.parseTypeName(name)) |p| {
-                    return self.allocType(.{ .primitive = p });
+                    return try self.allocType(.{ .primitive = p });
                 }
                 if (self.type_defs.get(name)) |t| return t;
                 self.typeError("t001", "Unknown type");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .type_vec => |inner| {
                 const elem_t = try self.resolveTypeExpr(inner);
-                return self.allocType(.{ .vec = @constCast(elem_t) });
+                return try self.allocType(.{ .vec = @constCast(elem_t) });
             },
             .type_map => |m| {
                 const kt = try self.resolveTypeExpr(m.key);
                 const vt = try self.resolveTypeExpr(m.val);
-                return self.allocType(.{ .map = .{ .key = @constCast(kt), .val = @constCast(vt) } });
+                return try self.allocType(.{ .map = .{ .key = @constCast(kt), .val = @constCast(vt) } });
             },
             .type_opt => |inner| {
                 const t = try self.resolveTypeExpr(inner);
-                return self.allocType(.{ .opt = @constCast(t) });
+                return try self.allocType(.{ .opt = @constCast(t) });
             },
             .type_res => |r| {
                 const ok_t = try self.resolveTypeExpr(r.ok);
                 const err_t = try self.resolveTypeExpr(r.err);
-                return self.allocType(.{ .res = .{ .ok = @constCast(ok_t), .err = @constCast(err_t) } });
+                return try self.allocType(.{ .res = .{ .ok = @constCast(ok_t), .err = @constCast(err_t) } });
             },
             else => {
                 self.typeError("t001", "Invalid type expression");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
         }
     }
@@ -170,34 +170,34 @@ pub const Checker = struct {
     fn registerNativeFunctions(self: *Checker, module: []const u8) !void {
         // Register native function types for known modules
         if (std.mem.eql(u8, module, "std")) {
-            try self.root_env.define("std.println", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("std.print", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("std.readln", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("std.read", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("std.readChar", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.{ .primitive = .char })) } }), false);
-            try self.root_env.define("std.range", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
+            try self.root_env.define("std.println", try self.allocType(.{ .func = .{ .params = &.{Type.Type{ .void_type = {} }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.print", try self.allocType(.{ .func = .{ .params = &.{Type.Type{ .void_type = {} }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("std.readln", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("std.read", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("std.readChar", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.{ .primitive = .char })) } }), false);
+            try self.root_env.define("std.range", try self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(try self.allocType(.{ .vec = @constCast(try self.allocType(.{ .primitive = .i32 })) })) } }), false);
         } else if (std.mem.eql(u8, module, "fs")) {
-            try self.root_env.define("fs.read", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
-            try self.root_env.define("fs.write", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .str } }, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
-            try self.root_env.define("fs.exists", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
-            try self.root_env.define("fs.delete", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.read", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("fs.write", try self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .str } }, .ret = @constCast(try self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.exists", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("fs.delete", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.{ .primitive = .bool })) } }), false);
         } else if (std.mem.eql(u8, module, "str")) {
-            try self.root_env.define("str.len", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.{ .primitive = .i32 })) } }), false);
-            try self.root_env.define("str.slice", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .primitive = .str })) } }), false);
+            try self.root_env.define("str.len", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.{ .primitive = .i32 })) } }), false);
+            try self.root_env.define("str.slice", try self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .str }, .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(try self.allocType(.{ .primitive = .str })) } }), false);
         } else if (std.mem.eql(u8, module, "thread")) {
-            try self.root_env.define("thread.spawn", self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("thread.join", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("thread.channel", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("thread.send", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
-            try self.root_env.define("thread.recv", self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.spawn", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .str }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.join", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.channel", try self.allocType(.{ .func = .{ .params = &.{}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
+            try self.root_env.define("thread.send", try self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(try self.allocType(.{ .primitive = .bool })) } }), false);
+            try self.root_env.define("thread.recv", try self.allocType(.{ .func = .{ .params = &.{.{ .primitive = .i32 }}, .ret = @constCast(try self.allocType(.void_type)) } }), false);
         } else if (std.mem.eql(u8, module, "range")) {
-            try self.root_env.define("range.range", self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) })) } }), false);
+            try self.root_env.define("range.range", try self.allocType(.{ .func = .{ .params = &.{ .{ .primitive = .i32 }, .{ .primitive = .i32 } }, .ret = @constCast(try self.allocType(.{ .vec = @constCast(try self.allocType(.{ .primitive = .i32 })) })) } }), false);
         }
     }
 
     fn checkTypeDecl(self: *Checker, node_idx: usize) !void {
         const td = self.arena.get(node_idx).type_decl;
-        const t = self.allocType(.{ .named = td.name });
+        const t = try self.allocType(.{ .named = td.name });
         try self.type_defs.put(td.name, t);
     }
 
@@ -232,7 +232,7 @@ pub const Checker = struct {
             declared_type = try self.resolveTypeExpr(ta);
         }
 
-        var final_type = declared_type orelse self.allocType(.{ .primitive = .i32 });
+        var final_type = declared_type orelse try self.allocType(.{ .primitive = .i32 });
         if (ls.value) |val_idx| {
             const val_type = try self.checkExprInEnv(env, val_idx);
             if (declared_type) |dt| {
@@ -260,16 +260,16 @@ pub const Checker = struct {
             const t = if (p.type_annot) |ta|
                 try self.resolveTypeExpr(ta)
             else
-                self.allocType(.{ .primitive = .i32 });
+                try self.allocType(.{ .primitive = .i32 });
             try param_types.append(self.allocator, t.*);
         }
 
         const ret_type = if (fs.ret_type) |rt|
             try self.resolveTypeExpr(rt)
         else
-            self.allocType(.void_type);
+            try self.allocType(.void_type);
 
-        const func_type = self.allocType(.{ .func = .{
+        const func_type = try self.allocType(.{ .func = .{
             .params = try param_types.toOwnedSlice(self.allocator),
             .ret = @constCast(ret_type),
         } });
@@ -284,7 +284,7 @@ pub const Checker = struct {
             const pt = if (p.type_annot) |ta|
                 try self.resolveTypeExpr(ta)
             else
-                self.allocType(.{ .primitive = .i32 });
+                try self.allocType(.{ .primitive = .i32 });
             try child_env.define(p.name, pt, false);
         }
 
@@ -301,23 +301,33 @@ pub const Checker = struct {
             return;
         }
         if (rs) |val_idx| {
+            if (env.return_type.?.* == .void_type) {
+                self.typeError("t005", "Cannot return a value from a void function");
+                return;
+            }
             const val_type = try self.checkExprInEnv(env, val_idx);
             if (!isCompatible(val_type, env.return_type.?)) {
                 self.typeError("t005", "Return type mismatch");
             }
+        } else if (env.return_type.?.* != .void_type) {
+            self.typeError("t005", "Must return a value from a non-void function");
         }
     }
 
     fn checkIfInEnv(self: *Checker, env: *TypeEnv, node_idx: usize) (error{OutOfMemory})!void {
         const ifs = self.arena.get(node_idx).if_stmt;
 
-        // Allow any value as if condition (truthy/falsy coercion at runtime)
-        _ = try self.checkExprInEnv(env, ifs.cond);
+        const cond_type = try self.checkExprInEnv(env, ifs.cond);
+        if (!isBoolish(cond_type)) {
+            self.typeError("t007", "If condition must be a boolean");
+        }
 
         try self.checkStmtInEnv(env, ifs.then_branch);
         for (ifs.elifs) |elif| {
-            // Allow any value as elif condition
-            _ = try self.checkExprInEnv(env, elif.cond);
+            const el_cond = try self.checkExprInEnv(env, elif.cond);
+            if (!isBoolish(el_cond)) {
+                self.typeError("t007", "Elif condition must be a boolean");
+            }
             try self.checkStmtInEnv(env, elif.body);
         }
         if (ifs.else_branch) |else_idx| {
@@ -342,7 +352,10 @@ pub const Checker = struct {
 
         const elem_type = switch (iter_type.*) {
             .vec => |v| v,
-            else => self.allocType(.{ .primitive = .i32 }),
+            else => {
+                self.typeError("t001", "For-in requires an iterable (vec or range)");
+                return;
+            },
         };
         try child_env.define(fs.var_name, elem_type, false);
         try self.checkStmtInEnv(&child_env, fs.body);
@@ -351,16 +364,16 @@ pub const Checker = struct {
     fn checkExprInEnv(self: *Checker, env: *TypeEnv, node_idx: usize) (error{OutOfMemory})!*const Type.Type {
         const node = self.arena.get(node_idx);
         return switch (node) {
-            .int_lit => self.allocType(.{ .primitive = .i32 }),
-            .float_lit => self.allocType(.{ .primitive = .f64 }),
-            .bool_lit => self.allocType(.{ .primitive = .bool }),
-            .str_lit => self.allocType(.{ .primitive = .str }),
-            .char_lit => self.allocType(.{ .primitive = .char }),
-            .nil_lit => self.allocType(.void_type),
+            .int_lit => try self.allocType(.{ .primitive = .i32 }),
+            .float_lit => try self.allocType(.{ .primitive = .f64 }),
+            .bool_lit => try self.allocType(.{ .primitive = .bool }),
+            .str_lit => try self.allocType(.{ .primitive = .str }),
+            .char_lit => try self.allocType(.{ .primitive = .char }),
+            .nil_lit => try self.allocType(.void_type),
             .ident => |name| {
                 if (env.lookup(name)) |s| return s.typ;
                 self.typeError("t002", "Undefined variable");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .field => |f| {
                 // Try module.function lookup (e.g., fs.write)
@@ -369,8 +382,8 @@ pub const Checker = struct {
                     const full_name = try std.fmt.allocPrint(self.type_arena.allocator(), "{s}.{s}", .{ obj_node.ident, f.field_name });
                     if (env.lookup(full_name)) |s| return s.typ;
                 }
-                // Fallback: field access on a value (struct field) — return i32 for now
-                return self.allocType(.{ .primitive = .i32 });
+                self.typeError("t002", "Unknown field");
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .binary => |b| self.checkBinaryInEnv(env, b),
             .unary => |u| self.checkUnaryInEnv(env, u),
@@ -378,10 +391,11 @@ pub const Checker = struct {
             .vec_lit => |items| self.checkVecLitInEnv(env, items),
             .struct_lit => |sl| {
                 if (self.type_defs.get(sl.type_name)) |t| return t;
-                return self.allocType(.{ .primitive = .i32 });
+                self.typeError("t002", "Unknown struct type");
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .assign => |a| self.checkAssignInEnv(env, a),
-            else => self.allocType(.{ .primitive = .i32 }),
+            else => try self.allocType(.{ .primitive = .i32 }),
         };
     }
 
@@ -391,24 +405,30 @@ pub const Checker = struct {
 
         switch (b.op) {
             .add, .sub, .mul, .div, .mod => {
-                if (isNumeric(lt) and isNumeric(rt)) return self.allocType(widenNumeric(lt, rt));
+                if (isNumeric(lt) and isNumeric(rt)) return try self.allocType(widenNumeric(lt, rt));
                 if (lt.* == .primitive and lt.primitive == .str and
                     rt.* == .primitive and rt.primitive == .str)
                 {
-                    if (b.op == .add) return self.allocType(.{ .primitive = .str });
+                    if (b.op == .add) return try self.allocType(.{ .primitive = .str });
                 }
                 self.typeError("t007", "Arithmetic requires numeric operands");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
-            .eq, .neq, .gt, .lt, .gte, .lte => {
-                if (isComparable(lt, rt)) return self.allocType(.{ .primitive = .bool });
+            .eq, .neq => {
+                if (isComparable(lt, rt)) return try self.allocType(.{ .primitive = .bool });
+                if (lt.* == .named and rt.* == .named and lt.eql(rt)) return try self.allocType(.{ .primitive = .bool });
                 self.typeError("t007", "Incomparable types");
-                return self.allocType(.{ .primitive = .bool });
+                return try self.allocType(.{ .primitive = .bool });
+            },
+            .gt, .lt, .gte, .lte => {
+                if (isComparable(lt, rt)) return try self.allocType(.{ .primitive = .bool });
+                self.typeError("t007", "Incomparable types");
+                return try self.allocType(.{ .primitive = .bool });
             },
             .and_, .or_ => {
-                if (isBoolish(lt) and isBoolish(rt)) return self.allocType(.{ .primitive = .bool });
+                if (isBoolish(lt) and isBoolish(rt)) return try self.allocType(.{ .primitive = .bool });
                 self.typeError("t007", "Logical operators require boolean operands");
-                return self.allocType(.{ .primitive = .bool });
+                return try self.allocType(.{ .primitive = .bool });
             },
         }
     }
@@ -419,31 +439,39 @@ pub const Checker = struct {
             .neg => {
                 if (isNumeric(ot)) return ot;
                 self.typeError("t007", "Negation requires numeric operand");
-                return self.allocType(.{ .primitive = .i32 });
+                return try self.allocType(.{ .primitive = .i32 });
             },
             .not => {
-                if (isBoolish(ot)) return self.allocType(.{ .primitive = .bool });
+                if (isBoolish(ot)) return try self.allocType(.{ .primitive = .bool });
                 self.typeError("t007", "Not requires boolean operand");
-                return self.allocType(.{ .primitive = .bool });
+                return try self.allocType(.{ .primitive = .bool });
             },
         }
     }
 
     fn checkCallInEnv(self: *Checker, env: *TypeEnv, c: anytype) (error{OutOfMemory})!*const Type.Type {
         const callee_type = try self.checkExprInEnv(env, c.callee);
-        for (c.args) |arg_idx| {
-            _ = try self.checkExprInEnv(env, arg_idx);
+        if (callee_type.* != .func) {
+            self.typeError("t001", "Cannot call non-function value");
+            return try self.allocType(.void_type);
         }
-        // Return the function's return type
-        if (callee_type.* == .func) {
-            return callee_type.func.ret;
+        const func = &callee_type.func;
+        if (c.args.len != func.params.len) {
+            self.typeError("t001", "Argument count mismatch");
+            return func.ret;
         }
-        return self.allocType(.void_type);
+        for (c.args, func.params) |arg_idx, param_type| {
+            const arg_type = try self.checkExprInEnv(env, arg_idx);
+            if (!isCompatible(arg_type, &param_type)) {
+                self.typeError("t004", "Argument type mismatch");
+            }
+        }
+        return func.ret;
     }
 
     fn checkVecLitInEnv(self: *Checker, env: *TypeEnv, items: []const usize) (error{OutOfMemory})!*const Type.Type {
         if (items.len == 0) {
-            return self.allocType(.{ .vec = @constCast(self.allocType(.{ .primitive = .i32 })) });
+            return try self.allocType(.{ .vec = @constCast(try self.allocType(.{ .primitive = .i32 })) });
         }
         const elem_type = try self.checkExprInEnv(env, items[0]);
         for (items[1..]) |item_idx| {
@@ -452,19 +480,19 @@ pub const Checker = struct {
                 self.typeError("t001", "Vec elements must have same type");
             }
         }
-        return self.allocType(.{ .vec = @constCast(elem_type) });
+        return try self.allocType(.{ .vec = @constCast(elem_type) });
     }
 
     fn checkAssignInEnv(self: *Checker, env: *TypeEnv, a: anytype) (error{OutOfMemory})!*const Type.Type {
         const target = self.arena.get(a.target);
         if (target != .ident) {
             self.typeError("t001", "Can only assign to variables");
-            return self.allocType(.{ .primitive = .i32 });
+            return try self.allocType(.{ .primitive = .i32 });
         }
         const name = target.ident;
         const sym = env.lookup(name) orelse {
             self.typeError("t002", "Assignment to undefined variable");
-            return self.allocType(.{ .primitive = .i32 });
+            return try self.allocType(.{ .primitive = .i32 });
         };
         if (!sym.mutable) self.typeError("t008", "Cannot assign to immutable variable");
         const val_type = try self.checkExprInEnv(env, a.value);
@@ -508,8 +536,6 @@ fn isComparable(a: *const Type.Type, b: *const Type.Type) bool {
 fn isCompatible(a: *const Type.Type, b: *const Type.Type) bool {
     if (a.eql(b)) return true;
     if (b.* == .void_type) return true;
-    // Allow any numeric-to-numeric assignment (compiler handles conversion)
-    if (isNumeric(a) and isNumeric(b)) return true;
     return false;
 }
 

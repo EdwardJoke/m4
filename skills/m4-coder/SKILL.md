@@ -120,13 +120,13 @@ str.slice("hello", 0, 2)   # "he"
 
 ## REPL / Execute
 ```
-$ m4 file.m4               # run file
-$ m4 -                     # run from stdin
-$ m4                       # launch REPL
-$ m4 lint file.m4          # type-check only
-$ m4 build file.m4         # compile to native binary
-$ m4 -d file.m4            # show bytecode
-$ m4 -f file.m4            # format source
+$ m4c file.m4               # run file
+$ m4c -                     # run from stdin
+$ m4c                       # launch REPL
+$ m4c lint file.m4          # type-check only
+$ m4c build file.m4         # compile to native binary
+$ m4c -d file.m4            # show bytecode
+$ m4c --format file.m4       # format source
 ```
 
 ## Common Pitfalls

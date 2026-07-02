@@ -1,6 +1,6 @@
 const std = @import("std");
-const VM = @import("../vm.zig");
-const value = @import("../value.zig");
+const VM = @import("../compiler/vm.zig");
+const value = @import("../compiler/value.zig");
 
 const VecObj = struct {
     items: std.ArrayList(value.Value),

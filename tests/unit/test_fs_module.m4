@@ -121,7 +121,7 @@ fun test_fs_delete_nonexistent() i32
     ret 0
 
 pub fun main() i32
-    let failures = 0
+    mut failures i32 = 0
 
     failures = failures + test_fs_write_read()
     failures = failures + test_fs_nonexistent()

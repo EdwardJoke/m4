@@ -24,7 +24,7 @@ m4 is a minimal scripting language implemented in Zig, featuring a hand-written 
 - **15 keywords only** — minimal grammar, minimal syntax entropy
 - **Result-based error handling** — `res[T E]` type with `?` propagation operator
 - **Structured error output** — diagnostics in ZON, JSON, or YAML formats
-- **32 error codes** — human-readable diagnostics with `m4 explain <code>`
+- **32 error codes** — human-readable diagnostics with `m4c explain <code>`
 - **Colored error output** — `--pretty` flag for terminal-friendly colored diagnostics
 
 ## Quick Start
@@ -39,7 +39,7 @@ m4 is a minimal scripting language implemented in Zig, featuring a hand-written 
 zig build
 ```
 
-The binary is placed at `zig-out/bin/m4`.
+The binary is placed at `zig-out/bin/m4c`.
 
 ### Run
 
@@ -55,27 +55,27 @@ echo 'std.println(42)' | zig build run -- -
 
 # Or build and use the binary directly
 zig build
-./zig-out/bin/m4 hello.m4
+./zig-out/bin/m4c hello.m4
 ```
 
 ## CLI
 
 ```
-m4 v0.3.3 — statically typed, AI-native scripting language
+m4c v0.3.3 — statically typed, AI-native scripting language
 
 Usage:
-  m4 [flags] <file.m4>          Run file
-  m4 [flags] -                  Run from stdin
-  m4                            Launch REPL
+  m4c [flags] <file.m4>          Run file
+  m4c [flags] -                  Run from stdin
+  m4c                            Launch REPL
 
 Commands:
-  m4 help [--zon|--json|--yaml]   Show this help
-  m4 version [--zon|--json|--yaml] Show version
-  m4 lint <file.m4>               Parse and type-check only
-  m4 build <file.m4> [opts]       Compile to native binary
-  m4 explain <code>               Explain an error code
+  m4c help [--zon|--json|--yaml]   Show this help
+  m4c version [--zon|--json|--yaml] Show version
+  m4c lint <file.m4>               Parse and type-check only
+  m4c build <file.m4> [opts]       Compile to native binary
+  m4c explain <code>               Explain an error code
 
-Use 'm4 <command> help' for command-specific help (e.g. 'm4 lint help --zon').
+Use 'm4c <command> help' for command-specific help (e.g. 'm4c lint help --zon').
 
 Flags:
   -d, --debug                    Show bytecode before execution

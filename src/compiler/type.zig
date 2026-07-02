@@ -94,8 +94,8 @@ pub fn parseTypeName(name: []const u8) ?Primitive {
 }
 
 test "parseTypeName: all primitives" {
-    try std.testing.expectEqual(Type.Primitive.i32, Type.parseTypeName("i32").?);
-    try std.testing.expectEqual(Type.Primitive.f64, Type.parseTypeName("f64").?);
-    try std.testing.expectEqual(Type.Primitive.str, Type.parseTypeName("str").?);
-    try std.testing.expectEqual(Type.Primitive.bool, Type.parseTypeName("bool").?);
+    try std.testing.expectEqual(Primitive.i32, parseTypeName("i32").?);
+    try std.testing.expectEqual(Primitive.f64, parseTypeName("f64").?);
+    try std.testing.expectEqual(Primitive.str, parseTypeName("str").?);
+    try std.testing.expectEqual(Primitive.bool, parseTypeName("bool").?);
 }

@@ -76,7 +76,8 @@ pub fn run(init: std.process.Init) !void {
         if (flags.file_path) |path| {
             try runBuild(arena_alloc, init.io, path, flags);
         } else {
-            std.debug.print("m4 build: missing file path. Usage: m4 build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+            std.debug.print("m4c build: missing file path. Usage: m4c build <file.m4> [-o <output>] [-target <arch>]\n", .{});
+            return error.InvalidFlag;
         }
         return;
     }
@@ -85,7 +86,8 @@ pub fn run(init: std.process.Init) !void {
         if (flags.file_path) |path| {
             try runLint(arena_alloc, init.io, path, flags);
         } else {
-            std.debug.print("m4 lint: missing file path. Usage: m4 lint <file.m4>\n", .{});
+            std.debug.print("m4c lint: missing file path. Usage: m4c lint <file.m4>\n", .{});
+            return error.InvalidFlag;
         }
         return;
     }
@@ -121,10 +123,10 @@ fn parseFlags(args: []const []const u8) !Flags {
                 } else if (std.mem.eql(u8, sub, "--yaml")) {
                     flags.output_format = .yaml;
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
-                    std.debug.print("m4: 'help' takes no positional arguments. Try 'm4 help' or 'm4 help --json'.\n", .{});
+                    std.debug.print("m4c: 'help' takes no positional arguments. Try 'm4c help' or 'm4c help --json'.\n", .{});
                     return error.InvalidFlag;
                 } else {
-                    std.debug.print("m4: unknown help flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
+                    std.debug.print("m4c: unknown help flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
                     return error.InvalidFlag;
                 }
             }
@@ -145,10 +147,10 @@ fn parseFlags(args: []const []const u8) !Flags {
                 } else if (std.mem.eql(u8, sub, "--yaml")) {
                     flags.output_format = .yaml;
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
-                    std.debug.print("m4: 'version' takes no positional arguments. Try 'm4 version' or 'm4 version --json'.\n", .{});
+                    std.debug.print("m4c: 'version' takes no positional arguments. Try 'm4c version' or 'm4c version --json'.\n", .{});
                     return error.InvalidFlag;
                 } else {
-                    std.debug.print("m4: unknown version flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
+                    std.debug.print("m4c: unknown version flag '{s}'. Valid: --zon, --json, --yaml\n", .{sub});
                     return error.InvalidFlag;
                 }
             }
@@ -161,6 +163,10 @@ fn parseFlags(args: []const []const u8) !Flags {
         }
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             flags.help_mode = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--version")) {
+            flags.version_mode = true;
             continue;
         }
         if (std.mem.eql(u8, arg, "--debug") or std.mem.eql(u8, arg, "-d")) {
@@ -193,7 +199,7 @@ fn parseFlags(args: []const []const u8) !Flags {
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
                     flags.file_path = sub;
                 } else {
-                    std.debug.print("m4: unknown lint flag '{s}'. Try 'm4 lint help' for usage.\n", .{sub});
+                    std.debug.print("m4c: unknown lint flag '{s}'. Try 'm4c lint help' for usage.\n", .{sub});
                     return error.InvalidFlag;
                 }
             }
@@ -221,13 +227,27 @@ fn parseFlags(args: []const []const u8) !Flags {
         }
         // explain subcommand
         if (std.mem.eql(u8, arg, "explain")) {
-            if (i + 1 >= args.len or std.mem.startsWith(u8, args[i + 1], "-")) {
-                std.debug.print("m4: 'explain' requires an error code. Try 'm4 explain r001'.\n", .{});
+            i += 1;
+            if (i >= args.len or std.mem.startsWith(u8, args[i], "-")) {
+                std.debug.print("m4c: 'explain' requires an error code. Try 'm4c explain r001'.\n", .{});
                 return error.InvalidFlag;
             }
-            i += 1;
             if (std.mem.eql(u8, args[i], "help")) {
                 flags.subcommand_help = "explain";
+                i += 1;
+                while (i < args.len) : (i += 1) {
+                    const sub = args[i];
+                    if (std.mem.eql(u8, sub, "--json")) {
+                        flags.output_format = .json;
+                    } else if (std.mem.eql(u8, sub, "--yaml")) {
+                        flags.output_format = .yaml;
+                    } else if (std.mem.eql(u8, sub, "--zon")) {
+                        flags.output_format = .zon;
+                    } else {
+                        std.debug.print("m4c: unknown explain flag '{s}'\n", .{sub});
+                        return error.InvalidFlag;
+                    }
+                }
                 continue;
             }
             flags.explain_code = args[i];
@@ -239,6 +259,41 @@ fn parseFlags(args: []const []const u8) !Flags {
             i += 1;
             if (i < args.len and std.mem.eql(u8, args[i], "help")) {
                 flags.subcommand_help = "build";
+                i += 1;
+                while (i < args.len) : (i += 1) {
+                    const sub = args[i];
+                    if (std.mem.eql(u8, sub, "--json")) {
+                        flags.output_format = .json;
+                    } else if (std.mem.eql(u8, sub, "--yaml")) {
+                        flags.output_format = .yaml;
+                    } else if (std.mem.eql(u8, sub, "--zon")) {
+                        flags.output_format = .zon;
+                    } else if (std.mem.eql(u8, sub, "-o") or std.mem.eql(u8, sub, "--output")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: --output requires a path argument\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.output_path = args[i];
+                    } else if (std.mem.eql(u8, sub, "-target") or std.mem.eql(u8, sub, "--target")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: --target requires an argument\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.build_target = args[i];
+                    } else if (std.mem.eql(u8, sub, "-O")) {
+                        if (i + 1 >= args.len) {
+                            std.debug.print("m4c: -O requires an optimization level\n", .{});
+                            return error.InvalidFlag;
+                        }
+                        i += 1;
+                        flags.qbe_opt = args[i];
+                    } else {
+                        std.debug.print("m4c: unknown build flag '{s}'\n", .{sub});
+                        return error.InvalidFlag;
+                    }
+                }
                 continue;
             }
             // Parse remaining arguments for the build subcommand
@@ -246,35 +301,34 @@ fn parseFlags(args: []const []const u8) !Flags {
                 const sub = args[i];
                 if (std.mem.eql(u8, sub, "-o") or std.mem.eql(u8, sub, "--output")) {
                     if (i + 1 >= args.len) {
-                        std.debug.print("m4: --output requires a path argument\n", .{});
+                        std.debug.print("m4c: --output requires a path argument\n", .{});
                         return error.InvalidFlag;
                     }
                     i += 1;
                     flags.output_path = args[i];
                 } else if (std.mem.eql(u8, sub, "-target") or std.mem.eql(u8, sub, "--target")) {
                     if (i + 1 >= args.len) {
-                        std.debug.print("m4: --target requires an architecture name\n", .{});
+                        std.debug.print("m4c: --target requires an architecture name\n", .{});
                         return error.InvalidFlag;
                     }
                     i += 1;
                     flags.build_target = args[i];
                 } else if (std.mem.eql(u8, sub, "-D")) {
                     if (i + 1 >= args.len) {
-                        std.debug.print("m4: -D requires an optimization level (fast|small)\n", .{});
+                        std.debug.print("m4c: -D requires an optimization level (fast|small)\n", .{});
                         return error.InvalidFlag;
                     }
                     i += 1;
                     const opt = args[i];
                     if (!std.mem.eql(u8, opt, "fast") and !std.mem.eql(u8, opt, "small")) {
-                        std.debug.print("m4: invalid -D value '{s}', expected 'fast' or 'small'\n", .{opt});
+                        std.debug.print("m4c: invalid -D value '{s}', expected 'fast' or 'small'\n", .{opt});
                         return error.InvalidFlag;
                     }
                     flags.qbe_opt = opt;
                 } else if (!std.mem.startsWith(u8, sub, "-")) {
                     flags.file_path = sub;
                 } else {
-                    std.debug.print("m4: unknown build flag '{s}'\n", .{sub});
-                    std.debug.print("Usage: m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]\n", .{});
+                    std.debug.print("m4c: unknown build flag '{s}'.\nUsage: m4c build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]\n", .{sub});
                     return error.InvalidFlag;
                 }
             }
@@ -285,8 +339,7 @@ fn parseFlags(args: []const []const u8) !Flags {
             flags.file_path = arg;
             continue;
         }
-        std.debug.print("m4: unknown flag '{s}'\n", .{arg});
-        std.debug.print("Try 'm4 help' for usage.\n", .{});
+        std.debug.print("m4c: unknown flag '{s}'.\nTry 'm4c help' for usage.\n", .{arg});
         return error.InvalidFlag;
     }
     return flags;
@@ -319,7 +372,7 @@ fn runSource(allocator: std.mem.Allocator, source: []const u8, flags: Flags) !vo
     if (flags.native_mode) {
         // Emit QBE IR instead of running via bytecode VM
         if (flags.error_format != null) {
-            std.debug.print("m4: --native does not support structured error output yet\n", .{});
+            std.debug.print("m4c: --native does not support structured error output yet\n", .{});
             return;
         }
         const qbe_ir = try m4.qbe.emitProgram(allocator, &parser.arena, stmts, .{});
@@ -506,86 +559,82 @@ fn buildSubcommandHelpInfo(allocator: std.mem.Allocator, name: []const u8) HelpI
 fn printSubcommandHelp(name: []const u8) void {
     if (std.mem.eql(u8, name, "lint")) {
         std.debug.print(
-            \\m4 lint — Parse and type-check a source file without executing
+            \\m4c lint — Parse and type-check a source file without executing
             \\
             \\Usage:
-            \\  m4 lint <file.m4> [--zon|--json|--yaml]
-            \\  m4 lint help [--zon|--json|--yaml]
+            \\  m4c lint <file.m4> [--zon|--json|--yaml]
             \\
-            \\Flags:
+            \\Options:
             \\  --zon, --json, --yaml  Structured error output format
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "build")) {
         std.debug.print(
-            \\m4 build — Compile to native binary
+            \\m4c build — Compile to native binary
             \\
             \\Usage:
-            \\  m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]
-            \\  m4 build help [--zon|--json|--yaml]
+            \\  m4c build <file.m4> [-o <output>] [--target <arch>] [-D fast|small]
             \\
             \\Options:
-            \\  -o, --output <path>       Output binary path (default: <file>.out)
-            \\  --target <arch>            Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
-            \\  -D <level>                 QBE optimization: fast (fast compile, large binary) or small (slow compile, small binary)
+            \\  -o, --output <path>   Output binary path (default: <file>.out)
+            \\  --target <arch>       Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
+            \\  -D <level>            QBE optimization: fast or small
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "explain")) {
         std.debug.print(
-            \\m4 explain — Explain an error code
+            \\m4c explain — Explain an error code
             \\
             \\Usage:
-            \\  m4 explain <code> [--zon|--json|--yaml]
-            \\  m4 explain help [--zon|--json|--yaml]
+            \\  m4c explain <code> [--zon|--json|--yaml]
             \\
-            \\Flags:
+            \\Options:
             \\  --zon, --json, --yaml  Structured output format
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "version")) {
         std.debug.print(
-            \\m4 version — Show version information
+            \\m4c version — Show version information
             \\
             \\Usage:
-            \\  m4 version [--zon|--json|--yaml]
-            \\  m4 version help [--zon|--json|--yaml]
+            \\  m4c version [--zon|--json|--yaml]
             \\
-            \\Flags:
+            \\Options:
             \\  --zon, --json, --yaml  Output format
             \\
         , .{});
     } else if (std.mem.eql(u8, name, "help")) {
         std.debug.print(
-            \\m4 help — Show CLI help
+            \\m4c help — Show CLI help
             \\
             \\Usage:
-            \\  m4 help [--zon|--json|--yaml]
+            \\  m4c help [--zon|--json|--yaml]
             \\
-            \\Flags:
+            \\Options:
             \\  --zon, --json, --yaml  Output format
             \\
         , .{});
     } else {
-        std.debug.print("m4: no help available for '{s}'. Try 'm4 help'.\n", .{name});
+        std.debug.print("m4c: no help available for '{s}'. Try 'm4c help'.\n", .{name});
     }
 }
 
 fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
     _ = allocator;
     return HelpInfo{
-        .name = "m4",
+        .name = "m4c",
         .version = VERSION,
         .description = "Statically typed, AI-native scripting language",
         .usage = &.{
-            UsageMode{ .mode = "run-file", .syntax = "m4 [flags] <file.m4>" },
-            UsageMode{ .mode = "run-stdin", .syntax = "m4 [flags] -" },
-            UsageMode{ .mode = "repl", .syntax = "m4" },
+            UsageMode{ .mode = "run-file", .syntax = "m4c [flags] <file.m4>" },
+            UsageMode{ .mode = "run-stdin", .syntax = "m4c [flags] -" },
+            UsageMode{ .mode = "repl", .syntax = "m4c" },
         },
         .subcommands = &.{
             SubcommandInfo{
                 .name = "help",
                 .description = "Show CLI help (text or structured)",
-                .usage = "m4 help [--zon|--json|--yaml]",
+                .usage = "m4c help [--zon|--json|--yaml]",
                 .flags = &.{
                     FlagInfo{ .name = "--zon", .description = "Output help as ZON" },
                     FlagInfo{ .name = "--json", .description = "Output help as JSON" },
@@ -595,7 +644,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             SubcommandInfo{
                 .name = "version",
                 .description = "Show version (text or structured)",
-                .usage = "m4 version [--zon|--json|--yaml]",
+                .usage = "m4c version [--zon|--json|--yaml]",
                 .flags = &.{
                     FlagInfo{ .name = "--zon", .description = "Output version as ZON" },
                     FlagInfo{ .name = "--json", .description = "Output version as JSON" },
@@ -605,7 +654,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             SubcommandInfo{
                 .name = "lint",
                 .description = "Parse and type-check a source file (no execution)",
-                .usage = "m4 lint <file.m4> [--zon|--json|--yaml]",
+                .usage = "m4c lint <file.m4> [--zon|--json|--yaml]",
                 .flags = &.{
                     FlagInfo{ .name = "--zon", .description = "Structured error output as ZON" },
                     FlagInfo{ .name = "--json", .description = "Structured error output as JSON" },
@@ -615,7 +664,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             SubcommandInfo{
                 .name = "build",
                 .description = "Compile to native binary",
-                .usage = "m4 build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]",
+                .usage = "m4c build <file.m4> [-o <output>] [-target <arch>] [-D fast|small]",
                 .flags = &.{
                     FlagInfo{ .name = "--output", .short = "-o", .description = "Output binary path (default: <file>.out)" },
                     FlagInfo{ .name = "--target", .description = "Target architecture (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)" },
@@ -625,7 +674,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
             SubcommandInfo{
                 .name = "explain",
                 .description = "Explain an error code",
-                .usage = "m4 explain <code> [--zon|--json|--yaml]",
+                .usage = "m4c explain <code> [--zon|--json|--yaml]",
                 .flags = &.{
                     FlagInfo{ .name = "--zon", .description = "Output explanation as ZON" },
                     FlagInfo{ .name = "--json", .description = "Output explanation as JSON" },
@@ -647,7 +696,7 @@ fn buildHelpInfo(allocator: std.mem.Allocator) HelpInfo {
 
 fn runVersion(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
     if (format) |fmt| {
-        const info = VersionInfo{ .name = "m4", .version = VERSION };
+        const info = VersionInfo{ .name = "m4c", .version = VERSION };
         const out = try switch (fmt) {
             .zon => serde.zon.toSlice(allocator, info),
             .json => serde.json.toSlice(allocator, info),
@@ -661,7 +710,7 @@ fn runVersion(allocator: std.mem.Allocator, format: ?m4.err.Format) !void {
 }
 
 fn runRepl(arena: std.mem.Allocator) !void {
-    std.debug.print("m4 v{s} REPL  (:h help, :q quit)\n\n", .{VERSION});
+    std.debug.print("m4c v{s} REPL  (:h help, :q quit)\n\n", .{VERSION});
 
     var line_buf = std.ArrayList(u8).empty;
     defer line_buf.deinit(arena);
@@ -760,14 +809,14 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
 
     const output_path = flags.output_path orelse blk: {
         // Derive output name from input: replace .m4 extension or add .out
-        if (std.mem.lastIndexOf(u8, path, ".")) |dot| {
-            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path[0..dot]});
+        if (std.mem.endsWith(u8, path, ".m4")) {
+            break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path[0..path.len - 3]});
         } else {
             break :blk try std.fmt.allocPrint(allocator, "{s}.out", .{path});
         }
     };
 
-    std.debug.print("m4 build: compiling '{s}' -> '{s}'\n", .{ path, output_path });
+    std.debug.print("m4c build: compiling '{s}' -> '{s}'\n", .{ path, output_path });
 
     const result = try m4.qbe_build.buildNative(
         allocator,
@@ -779,7 +828,7 @@ fn runBuild(allocator: std.mem.Allocator, io: std.Io, path: []const u8, flags: F
     );
     _ = result;
 
-    std.debug.print("m4 build: done -> '{s}'\n", .{output_path});
+    std.debug.print("m4c build: done -> '{s}'\n", .{output_path});
 }
 
 fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const u8 {
@@ -791,9 +840,9 @@ fn readFile(allocator: std.mem.Allocator, io: std.Io, path: []const u8) ![]const
             else => @errorName(err),
         };
         if (m4.err.pretty) {
-            std.debug.print("\x1b[1mm4:\x1b[0m \x1b[91merror:\x1b[0m cannot read '{s}': \x1b[37m{s}\x1b[0m\n", .{ path, clean_msg });
+            std.debug.print("\x1b[1mm4c:\x1b[0m \x1b[91merror:\x1b[0m cannot read '{s}': \x1b[37m{s}\x1b[0m\n", .{ path, clean_msg });
         } else {
-            std.debug.print("m4: error: cannot read '{s}': {s}\n", .{ path, clean_msg });
+            std.debug.print("m4c: error: cannot read '{s}': {s}\n", .{ path, clean_msg });
         }
         return error.ParseError;
     };
@@ -818,58 +867,55 @@ fn readStdin(allocator: std.mem.Allocator, _: std.Io) ![]const u8 {
 
 fn printHelp() void {
     std.debug.print(
-        \\m4 v{s} — statically typed, AI-native scripting language
+        \\m4c v{s} — statically typed, AI-native scripting language
         \\
         \\Usage:
-        \\  m4 [flags] <file.m4>          Run file
-        \\  m4 [flags] -                  Run from stdin
-        \\  m4                            Launch REPL
+        \\  m4c [options] <file.m4>     Run file
+        \\  m4c [options] -             Run from stdin
+        \\  m4c                         Launch REPL
         \\
         \\Commands:
-        \\  m4 help [--zon|--json|--yaml]   Show this help
-        \\  m4 version [--zon|--json|--yaml] Show version
-        \\  m4 lint <file.m4>               Parse and type-check only
-        \\  m4 build <file.m4> [opts]       Compile to native binary
-        \\  m4 explain <code>               Explain an error code
+        \\  help [--fmt]              Show this help
+        \\  version [--fmt]           Show version
+        \\  lint <file.m4> [--fmt]    Parse and type-check only
+        \\  build <file.m4> [options] Compile to native binary
+        \\  explain <code> [--fmt]    Explain an error code
         \\
-        \\Use 'm4 <command> help' for command-specific help (e.g. 'm4 lint help --zon').
+        \\Run 'm4c <command> help' for command-specific options (e.g. 'm4c lint help').
         \\
-        \\Flags:
-        \\  -d, --debug                    Show bytecode before execution
-        \\  -f, --format                   Format source code and print
-        \\  -p, --pretty                   Colored error output for terminal readability
-        \\  --native                       Emit QBE IR instead of running via bytecode VM
-        \\  --zon, --json, --yaml           Structured error output format
-        \\
-        \\  -o, --output <path>            Output binary path (build only, default: <file>.out)
-        \\  --target <arch>                Target architecture for build (amd64_apple, arm64_apple, arm64, amd64_sysv, rv64)
-        \\  -D <level>                     QBE optimization for build (fast|small)
+        \\Options:
+        \\  -v, --version          Show version
+        \\  -d, --debug            Show bytecode before execution
+        \\  -f, --format           Format source code and print
+        \\  -p, --pretty           Colored error output for terminal readability
+        \\  --native               Emit QBE IR instead of running via bytecode VM
+        \\  --zon, --json, --yaml  Structured output format (replace --fmt above)
         \\
     , .{VERSION});
 }
 
 fn printVersion() void {
-    std.debug.print("m4 v{s}\n", .{VERSION});
+    std.debug.print("m4c v{s}\n", .{VERSION});
 }
 
 test "cli: -D fast is accepted" {
-    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "fast" };
+    const args = &[_][]const u8{ "m4c", "build", "file.m4", "-D", "fast" };
     const flags = try parseFlags(args);
     try std.testing.expectEqualStrings("fast", flags.qbe_opt.?);
 }
 
 test "cli: -D small is accepted" {
-    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "small" };
+    const args = &[_][]const u8{ "m4c", "build", "file.m4", "-D", "small" };
     const flags = try parseFlags(args);
     try std.testing.expectEqualStrings("small", flags.qbe_opt.?);
 }
 
 test "cli: -D missing argument returns InvalidFlag" {
-    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D" };
+    const args = &[_][]const u8{ "m4c", "build", "file.m4", "-D" };
     try std.testing.expectError(error.InvalidFlag, parseFlags(args));
 }
 
 test "cli: -D with invalid value returns InvalidFlag" {
-    const args = &[_][]const u8{ "m4", "build", "file.m4", "-D", "invalid" };
+    const args = &[_][]const u8{ "m4c", "build", "file.m4", "-D", "invalid" };
     try std.testing.expectError(error.InvalidFlag, parseFlags(args));
 }

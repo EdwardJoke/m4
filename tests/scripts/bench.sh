@@ -13,7 +13,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-M4_BIN="$PROJECT_DIR/zig-out/bin/m4"
+M4_BIN="$PROJECT_DIR/zig-out/bin/m4c"
 
 # ── Detect available tools ─────────────────────────────────────────────
 
@@ -134,7 +134,7 @@ run_time() {
 
     if [ -f "$PROJECT_DIR/$m4_file" ]; then
         echo "  [m4 (VM)]"
-        (cd "$PROJECT_DIR" && time (zig-out/bin/m4 "$m4_file" > /dev/null 2>&1)) 2>&1
+        (cd "$PROJECT_DIR" && time (zig-out/bin/m4c "$m4_file" > /dev/null 2>&1)) 2>&1
         echo ""
     fi
 

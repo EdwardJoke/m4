@@ -3,10 +3,10 @@ const Parser = @import("parser.zig").Parser;
 const qbe = @import("qbe.zig");
 
 /// Embedded m4rt.c source code — embedded at compile time via @embedFile.
-const m4rt_c_src = @embedFile("runtime/m4rt.c");
+const m4rt_c_src = @embedFile("../runtime/m4rt.c");
 
 /// Embedded m4rt.h source code — embedded at compile time via @embedFile.
-const m4rt_h_src = @embedFile("runtime/m4rt.h");
+const m4rt_h_src = @embedFile("../runtime/m4rt.h");
 
 /// Results from a native build.
 pub const BuildResult = struct {
@@ -44,9 +44,10 @@ pub fn buildNative(
     const qbe_ir = try qbe.emitProgram(allocator, &parser.arena, stmts_owned, .{});
     defer allocator.free(qbe_ir);
 
-    // ── Step 3: Create temp directory ───────────────────────────────────
-    const tmp_dir_path = ".m4_cache";
-    // Ensure directory exists
+    // ── Step 3: Create unique temp directory ────────────────────────────
+    const build_id = @as(u64, @intCast(@intFromPtr(&source))) +% @as(u64, @intCast(@intFromPtr(&buildNative)));
+    const tmp_dir_path = try std.fmt.allocPrint(allocator, ".m4_cache/{x}", .{build_id});
+    defer allocator.free(tmp_dir_path);
     {
         const mkdir_result = try std.process.run(allocator, io, .{
             .argv = &[_][]const u8{ "mkdir", "-p", tmp_dir_path },
@@ -55,33 +56,67 @@ pub fn buildNative(
         allocator.free(mkdir_result.stderr);
     }
 
-    const ssa_path = ".m4_cache/prog.ssa";
-    const asm_path = ".m4_cache/prog.s";
+    const ssa_path = try std.fmt.allocPrint(allocator, "{s}/prog.ssa", .{tmp_dir_path});
+    defer allocator.free(ssa_path);
+    const ssa_path_z = try allocator.dupeZ(u8, ssa_path);
+    defer allocator.free(ssa_path_z);
+    const asm_path = try std.fmt.allocPrint(allocator, "{s}/prog.s", .{tmp_dir_path});
+    defer allocator.free(asm_path);
+    const asm_path_z = try allocator.dupeZ(u8, asm_path);
+    defer allocator.free(asm_path_z);
 
     // Write files using C stdio (project links libc)
     {
-        const f = fopen(ssa_path, "w") orelse return error.FileWriteError;
-        _ = fwrite(qbe_ir.ptr, 1, qbe_ir.len, f);
-        _ = fclose(f);
+        const f = fopen(ssa_path_z, "w") orelse return error.FileWriteError;
+        if (fwrite(qbe_ir.ptr, 1, qbe_ir.len, f) != qbe_ir.len) {
+            _ = fclose(f);
+            return error.FileWriteError;
+        }
+        if (fclose(f) != 0) return error.FileWriteError;
     }
     {
-        const f = fopen(".m4_cache/m4rt.c", "w") orelse return error.FileWriteError;
-        _ = fwrite(m4rt_c_src.ptr, 1, m4rt_c_src.len, f);
-        _ = fclose(f);
+        const rt_c_path = try std.fmt.allocPrint(allocator, "{s}/m4rt.c", .{tmp_dir_path});
+        defer allocator.free(rt_c_path);
+        const rt_c_path_z = try allocator.dupeZ(u8, rt_c_path);
+        defer allocator.free(rt_c_path_z);
+        const f = fopen(rt_c_path_z, "w") orelse return error.FileWriteError;
+        if (fwrite(m4rt_c_src.ptr, 1, m4rt_c_src.len, f) != m4rt_c_src.len) {
+            _ = fclose(f);
+            return error.FileWriteError;
+        }
+        if (fclose(f) != 0) return error.FileWriteError;
     }
     {
-        const f = fopen(".m4_cache/m4rt.h", "w") orelse return error.FileWriteError;
-        _ = fwrite(m4rt_h_src.ptr, 1, m4rt_h_src.len, f);
-        _ = fclose(f);
+        const rt_h_path = try std.fmt.allocPrint(allocator, "{s}/m4rt.h", .{tmp_dir_path});
+        defer allocator.free(rt_h_path);
+        const rt_h_path_z = try allocator.dupeZ(u8, rt_h_path);
+        defer allocator.free(rt_h_path_z);
+        const f = fopen(rt_h_path_z, "w") orelse return error.FileWriteError;
+        if (fwrite(m4rt_h_src.ptr, 1, m4rt_h_src.len, f) != m4rt_h_src.len) {
+            _ = fclose(f);
+            return error.FileWriteError;
+        }
+        if (fclose(f) != 0) return error.FileWriteError;
+    }
+
+    // ── Step 3b: Symlink .m4_cache/m4rt.c and .m4_cache/m4rt.h for compat ─
+    {
+        _ = std.process.run(allocator, io, .{
+            .argv = &[_][]const u8{ "cp", try std.fmt.allocPrint(allocator, "{s}/m4rt.c", .{tmp_dir_path}), ".m4_cache/m4rt.c" },
+        }) catch {};
+        _ = std.process.run(allocator, io, .{
+            .argv = &[_][]const u8{ "cp", try std.fmt.allocPrint(allocator, "{s}/m4rt.h", .{tmp_dir_path}), ".m4_cache/m4rt.h" },
+        }) catch {};
     }
 
     // ── Step 4: Compile .ssa → .s via QBE library ──────────────────────
     const resolved_target = target orelse getHostTarget();
 
-    // Runtime object path keyed by hash of runtime source + target
+    // Runtime object path keyed by hash of runtime source + header + target
     const rt_cache_key = blk: {
         var h: u64 = 0;
         for (m4rt_c_src) |b| h = h *% 31 +% b;
+        for (m4rt_h_src) |b| h = h *% 31 +% b;
         for (resolved_target) |b| h = h *% 31 +% b;
         break :blk h;
     };
@@ -92,11 +127,6 @@ pub fn buildNative(
         allocator.free(rt_obj_path_z);
     }
 
-    // Need null-terminated strings for C FFI
-    const ssa_path_z = try allocator.dupeZ(u8, ssa_path);
-    defer allocator.free(ssa_path_z);
-    const asm_path_z = try allocator.dupeZ(u8, asm_path);
-    defer allocator.free(asm_path_z);
     const target_z = try allocator.dupeZ(u8, resolved_target);
     defer allocator.free(target_z);
     const qbe_opt_z = if (qbe_opt) |opt| try allocator.dupeZ(u8, opt) else null;
@@ -105,7 +135,7 @@ pub fn buildNative(
 
     const qbe_result = qbe_compile_ssa(ssa_path_z, asm_path_z, target_z, qbe_opt_ptr);
     if (qbe_result != 0) {
-        std.debug.print("m4 build: QBE compilation failed (error {d})\n", .{qbe_result});
+        std.debug.print("m4c build: QBE compilation failed (error {d})\n", .{qbe_result});
         return error.QbeCompileError;
     }
 
@@ -124,10 +154,14 @@ pub fn buildNative(
             const host_target = getHostTarget();
             const is_cross = !std.mem.eql(u8, resolved_target, host_target);
 
+            const rt_c_path = try std.fmt.allocPrint(allocator, "{s}/m4rt.c", .{tmp_dir_path});
+            defer allocator.free(rt_c_path);
+            const inc_path = try std.fmt.allocPrint(allocator, "-I{s}", .{tmp_dir_path});
+            defer allocator.free(inc_path);
             const cc_args = if (is_cross)
-                &[_][]const u8{ "cc", "-c", "-std=c99", "-I.m4_cache", "-target", targetToClangTarget(resolved_target), ".m4_cache/m4rt.c", "-o", rt_obj_path }
+                &[_][]const u8{ "cc", "-c", "-std=c99", inc_path, "-target", targetToClangTarget(resolved_target), rt_c_path, "-o", rt_obj_path }
             else
-                &[_][]const u8{ "cc", "-c", "-std=c99", "-I.m4_cache", ".m4_cache/m4rt.c", "-o", rt_obj_path };
+                &[_][]const u8{ "cc", "-c", "-std=c99", inc_path, rt_c_path, "-o", rt_obj_path };
 
             const result = try std.process.run(allocator, io, .{ .argv = cc_args });
             defer {
@@ -135,7 +169,7 @@ pub fn buildNative(
                 allocator.free(result.stderr);
             }
             if (result.term != .exited or result.term.exited != 0) {
-                std.debug.print("m4 build: runtime compilation failed\n{s}\n", .{result.stderr});
+                std.debug.print("m4c build: runtime compilation failed\n{s}\n", .{result.stderr});
                 return error.RuntimeCompileError;
             }
         }
@@ -156,7 +190,9 @@ pub fn buildNative(
             try argv.append(allocator, as_arch);
         }
         try argv.append(allocator, "-std=c99");
-        try argv.append(allocator, "-I.m4_cache");
+        const inc_arg = try std.fmt.allocPrint(allocator, "-I{s}", .{tmp_dir_path});
+        defer allocator.free(inc_arg);
+        try argv.append(allocator, inc_arg);
         if (is_cross) {
             try argv.append(allocator, "-target");
             try argv.append(allocator, targetToClangTarget(resolved_target));
@@ -174,17 +210,23 @@ pub fn buildNative(
             allocator.free(result.stderr);
         }
         if (result.term != .exited or result.term.exited != 0) {
-            std.debug.print("m4 build: assembly/linking failed\n{s}\n", .{result.stderr});
+            std.debug.print("m4c build: assembly/linking failed\n{s}\n", .{result.stderr});
             return error.CompileLinkError;
         }
     }
 
     // ── Step 8: Make executable ────────────────────────────────────────
     {
-        // Use chmod via process.run (portable)
-        _ = try std.process.run(allocator, io, .{
+        const chmod_result = try std.process.run(allocator, io, .{
             .argv = &[_][]const u8{ "chmod", "0755", output_path },
         });
+        defer {
+            allocator.free(chmod_result.stdout);
+            allocator.free(chmod_result.stderr);
+        }
+        if (chmod_result.term != .exited or chmod_result.term.exited != 0) {
+            return error.CompileLinkError;
+        }
     }
 
     return BuildResult{ .output_path = output_path };

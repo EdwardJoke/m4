@@ -142,9 +142,9 @@ pub const Compiler = struct {
             for (self.locals.list.items) |l| {
                 if (l.slot + 1 > self.reg_count) self.reg_count = l.slot + 1;
             }
-            // Check if this statement defined a pub fun main
+            // Check if this statement defined a pub fun main with zero params
             const node = self.arena.get(stmt_idx);
-            if (node == .fun_stmt and node.fun_stmt.public and std.mem.eql(u8, node.fun_stmt.name, "main")) {
+            if (node == .fun_stmt and node.fun_stmt.public and std.mem.eql(u8, node.fun_stmt.name, "main") and node.fun_stmt.params.len == 0) {
                 has_main = true;
             }
         }
@@ -171,7 +171,10 @@ pub const Compiler = struct {
             .continue_stmt => try self.compileContinue(),
             .esc_stmt => try self.compileEsc(),
             .ret_stmt => try self.compileRet(node_idx),
-            .expr_stmt => _ = try self.compileExpr(node.expr_stmt),
+            .expr_stmt => {
+                _ = try self.compileExpr(node.expr_stmt);
+                self.resetTemps();
+            },
             .block => {
                 for (node.block) |s| {
                     try self.compileDeclOrStmt(s);
@@ -567,7 +570,14 @@ fn compileStmtToChunk(
                 try locals.add(allocator, ls.name, slot, ls.mutable);
             }
         },
-        .expr_stmt => _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, node.expr_stmt),
+        .expr_stmt => {
+            _ = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, node.expr_stmt);
+            var max_slot: u8 = 0;
+            for (locals.list.items) |l| {
+                if (l.slot + 1 > max_slot) max_slot = l.slot + 1;
+            }
+            reg_count.* = max_slot;
+        },
         .ret_stmt => {
             var ret_reg: u8 = 0;
             if (node.ret_stmt) |vi| ret_reg = try compileExprToChunk(allocator, arena, chunk, locals, reg_count, vi);
@@ -594,7 +604,7 @@ fn compileStmtToChunk(
             try chunk.write(OpCode.encodeAsBx(.jump, 0, 0), 1);
             try lp.exit_patches.append(allocator, pi);
         },
-        else => {},
+        else => return error.CompileError,
     }
 }
 
@@ -787,7 +797,7 @@ fn compileExprToChunk(
             return r;
         },
         else => {
-            return 0;
+            return error.CompileError;
         },
     };
 }

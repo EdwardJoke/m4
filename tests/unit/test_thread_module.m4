@@ -16,7 +16,7 @@ fun add_two(a i32, b i32) i32
 fun multiply_three(a i32, b i32, c i32) i32
     ret a * b * c
 
-fun test_spawn_join_basic()
+fun test_spawn_join_basic() i32
     std.println("--- thread.spawn + thread.join basic ---")
 
     let handle = thread.spawn(add_one, 41)
@@ -34,7 +34,9 @@ fun test_spawn_join_basic()
     std.print("multiply_three(2, 3, 4) = ")
     std.println(result3)
 
-fun test_channel_basic()
+    ret 0
+
+fun test_channel_basic() i32
     std.println("--- thread.channel basic ---")
 
     let ch = thread.channel()
@@ -47,7 +49,9 @@ fun test_channel_basic()
     std.print("received: ")
     std.println(received)
 
-fun test_channel_multiple_values()
+    ret 0
+
+fun test_channel_multiple_values() i32
     std.println("--- thread.channel multiple values ---")
 
     let ch = thread.channel()
@@ -67,7 +71,9 @@ fun test_channel_multiple_values()
     std.print(", ")
     std.println(r3)
 
-fun test_channel_different_types()
+    ret 0
+
+fun test_channel_different_types() i32
     std.println("--- thread.channel different types ---")
 
     let ch = thread.channel()
@@ -87,12 +93,16 @@ fun test_channel_different_types()
     std.print("bool: ")
     std.println(r3)
 
-fun channel_worker(ch)
+    ret 0
+
+fun channel_worker(ch) i32
     thread.send(ch, 42)
     thread.send(ch, 99)
     thread.send(ch, "done")
 
-fun test_spawn_with_channel()
+    ret 0
+
+fun test_spawn_with_channel() i32
     std.println("--- thread.spawn with channel ---")
 
     let ch = thread.channel()
@@ -121,12 +131,22 @@ fun test_spawn_with_channel()
     std.print(", ")
     std.println(r3)
 
-pub fun main() i32
-    test_spawn_join_basic()
-    test_channel_basic()
-    test_channel_multiple_values()
-    test_channel_different_types()
-    test_spawn_with_channel()
-
-    std.println("--- All thread module tests passed ---")
     ret 0
+
+pub fun main() i32
+    mut failures i32 = 0
+
+    failures = failures + test_spawn_join_basic()
+    failures = failures + test_channel_basic()
+    failures = failures + test_channel_multiple_values()
+    failures = failures + test_channel_different_types()
+    failures = failures + test_spawn_with_channel()
+
+    if failures == 0
+        std.println("--- All thread module tests passed ---")
+    else
+        std.print("--- FAILED: ")
+        std.print(failures)
+        std.println(" test(s) failed ---")
+
+    ret failures
